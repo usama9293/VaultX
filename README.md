@@ -54,6 +54,10 @@ Complete
 
 The project is establishing its architecture and development foundation. Authentication, vault workflows, and frontend functionality are future work.
 
+## Branch Strategy
+
+`main` represents stable project state. Feature, bug-fix, and security work should use branches named `feature/<name>`, `fix/<name>`, and `security/<name>`, respectively. When a shared integration branch is needed, use `develop`; merge reviewed work into `main` only when it is stable. No additional branches are created until needed.
+
 ## Security
 
 - Plaintext master passwords must never be persisted; authentication flows are not yet implemented.
