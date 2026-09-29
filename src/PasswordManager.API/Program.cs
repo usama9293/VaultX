@@ -15,12 +15,24 @@ public class Program
         builder.Services.AddInfrastructure(builder.Configuration);
         builder.Services.AddControllers();
 
+        builder.Services.AddCors(options =>
+        {
+            options.AddPolicy("FrontendDevPolicy", policy =>
+            {
+                policy.WithOrigins("http://localhost:5173", "https://localhost:5173", "http://localhost:3000")
+                    .AllowAnyHeader()
+                    .AllowAnyMethod();
+            });
+        });
+
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
 
         var app = builder.Build();
 
         app.UseMiddleware<ExceptionHandlingMiddleware>();
+
+        app.UseCors("FrontendDevPolicy");
 
         if (app.Environment.IsDevelopment())
         {

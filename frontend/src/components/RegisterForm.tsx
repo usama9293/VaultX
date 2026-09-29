@@ -1,10 +1,11 @@
 import React, { useState } from 'react'
-import type { FormErrors, RegisterFormData } from '../types/auth'
+import { ApiError, registerUser } from '../api/auth'
+import type { FormErrors, RegisterFormData, UserResponse } from '../types/auth'
 import { evaluatePasswordCriteria, validateRegisterForm } from '../utils/validation'
 import './RegisterForm.css'
 
 interface RegisterFormProps {
-  onSubmit?: (data: RegisterFormData) => Promise<void> | void
+  onSubmit?: (data: RegisterFormData) => Promise<UserResponse | void> | UserResponse | void
 }
 
 export const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit }) => {
@@ -18,7 +19,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit }) => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [submitSuccessNotice, setSubmitSuccessNotice] = useState<string | null>(null)
+  const [registeredUser, setRegisteredUser] = useState<UserResponse | null>(null)
 
   const passwordCriteria = evaluatePasswordCriteria(formData.password)
 
@@ -43,9 +44,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit }) => {
 
     if (isSubmitting) return
 
-    setSubmitSuccessNotice(null)
-
-    // Client-side validation check
+    // Run client-side UX validation first
     const validationErrors = validateRegisterForm(formData)
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors)
@@ -56,18 +55,105 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit }) => {
     setIsSubmitting(true)
 
     try {
+      let result: UserResponse | void
       if (onSubmit) {
-        await onSubmit(formData)
+        result = await onSubmit(formData)
       } else {
-        // Step 6D local stub: Simulate local processing without API integration
-        await new Promise((resolve) => setTimeout(resolve, 600))
-        setSubmitSuccessNotice('Client validation passed. Form is ready for Step 6E API integration.')
+        result = await registerUser(formData)
       }
-    } catch {
-      setErrors({ general: 'An unexpected error occurred during submission.' })
+
+      // Wiping sensitive credentials from React state
+      setFormData({
+        email: '',
+        password: '',
+        confirmPassword: '',
+      })
+
+      if (result) {
+        setRegisteredUser(result)
+      } else {
+        // Fallback if custom submit didn't return UserResponse
+        setRegisteredUser({
+          id: 'registered',
+          email: formData.email.trim().toLowerCase(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      }
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        if (err.status === 409) {
+          setErrors({
+            email: err.message,
+            general: err.message,
+          })
+        } else if (err.status === 400 && err.errorResponse?.errors) {
+          const apiValidationErrors: FormErrors = {}
+          const errorMap = err.errorResponse.errors
+
+          if (errorMap.Email && errorMap.Email.length > 0) {
+            apiValidationErrors.email = errorMap.Email[0]
+          }
+          if (errorMap.Password && errorMap.Password.length > 0) {
+            apiValidationErrors.password = errorMap.Password[0]
+          }
+          if (errorMap.ConfirmPassword && errorMap.ConfirmPassword.length > 0) {
+            apiValidationErrors.confirmPassword = errorMap.ConfirmPassword[0]
+          }
+
+          apiValidationErrors.general = err.message
+          setErrors(apiValidationErrors)
+        } else {
+          setErrors({ general: err.message })
+        }
+      } else {
+        setErrors({ general: 'Unable to connect to the server. Please check your connection and try again.' })
+      }
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  const handleReset = () => {
+    setRegisteredUser(null)
+    setFormData({
+      email: '',
+      password: '',
+      confirmPassword: '',
+    })
+    setErrors({})
+    setShowPassword(false)
+    setShowConfirmPassword(false)
+  }
+
+  if (registeredUser) {
+    return (
+      <div className="register-form-container" role="region" aria-label="Registration Success">
+        <header className="form-header">
+          <div className="brand-badge">VaultX Security</div>
+          <h1 className="form-title">Registration Successful</h1>
+          <p className="form-subtitle">Your VaultX account has been initialized</p>
+        </header>
+
+        <div className="form-status-alert success" role="status" aria-live="polite">
+          <p className="success-heading">Account Created</p>
+          <p className="success-email">
+            Email: <strong>{registeredUser.email}</strong>
+          </p>
+          <p className="success-note">
+            Your account has been registered on the server. Vault creation and authentication will be available in future milestone steps.
+          </p>
+        </div>
+
+        <button type="button" className="submit-btn" onClick={handleReset}>
+          Register Another Account
+        </button>
+
+        <footer className="form-footer-note">
+          Step 6E — Registration Integration Complete
+        </footer>
+      </div>
+    )
   }
 
   return (
@@ -78,14 +164,8 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit }) => {
         <p className="form-subtitle">Register to initialize your secure zero-knowledge vault</p>
       </header>
 
-      {submitSuccessNotice && (
-        <div className="form-status-alert info" role="status" aria-live="polite">
-          {submitSuccessNotice}
-        </div>
-      )}
-
       {errors.general && (
-        <div className="form-status-alert" role="alert" aria-live="assertive">
+        <div className="form-status-alert error" role="alert" aria-live="assertive">
           {errors.general}
         </div>
       )}
@@ -239,7 +319,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit }) => {
       </form>
 
       <footer className="form-footer-note">
-        Step 6D — Client-side Registration UI (Backend integration connects in Step 6E)
+        Step 6E — Connected to POST /api/auth/register
       </footer>
     </div>
   )

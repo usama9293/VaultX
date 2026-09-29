@@ -18,3 +18,24 @@ export interface PasswordCriteria {
   hasDigit: boolean
   hasSpecial: boolean
 }
+
+export interface RegisterUserRequest {
+  email: string
+  password: string
+  confirmPassword: string
+}
+
+export interface UserResponse {
+  id: string
+  email: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ApiErrorResponse {
+  type?: string
+  title?: string
+  status?: number
+  detail?: string
+  errors?: Record<string, string[]>
+}

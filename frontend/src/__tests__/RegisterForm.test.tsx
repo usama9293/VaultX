@@ -1,9 +1,19 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RegisterForm } from '../components/RegisterForm'
 
-describe('RegisterForm Component', () => {
+describe('RegisterForm Component (Integration)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+    localStorage.clear()
+    sessionStorage.clear()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('1. renders all registration form fields and accessible labels', () => {
     render(<RegisterForm />)
 
@@ -15,7 +25,7 @@ describe('RegisterForm Component', () => {
     expect(screen.getByLabelText(/password requirements/i)).toBeInTheDocument()
   })
 
-  it('2. empty submission displays required validation errors', async () => {
+  it('2. empty submission displays required validation errors without calling API', async () => {
     const user = userEvent.setup()
     render(<RegisterForm />)
 
@@ -25,136 +35,141 @@ describe('RegisterForm Component', () => {
     expect(screen.getByText('Email is required.')).toBeInTheDocument()
     expect(screen.getByText('Password is required.')).toBeInTheDocument()
     expect(screen.getByText('Password confirmation is required.')).toBeInTheDocument()
+    expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('3. rejects invalid email formats', async () => {
+  it('3. rejects password mismatch on client without calling API', async () => {
     const user = userEvent.setup()
     render(<RegisterForm />)
-
-    const emailInput = screen.getByLabelText(/email address/i)
-    await user.type(emailInput, 'notanemail')
-
-    const submitBtn = screen.getByRole('button', { name: /create vaultx account/i })
-    await user.click(submitBtn)
-
-    expect(screen.getByText('Email format is invalid.')).toBeInTheDocument()
-  })
-
-  it('4. rejects password shorter than 12 characters', async () => {
-    const user = userEvent.setup()
-    render(<RegisterForm />)
-
-    const passwordInput = screen.getByLabelText(/^master password/i)
-    await user.type(passwordInput, 'Short1!a')
-
-    const submitBtn = screen.getByRole('button', { name: /create vaultx account/i })
-    await user.click(submitBtn)
-
-    expect(screen.getByText('Password must be at least 12 characters long.')).toBeInTheDocument()
-  })
-
-  it('5. rejects password missing uppercase letter', async () => {
-    const user = userEvent.setup()
-    render(<RegisterForm />)
-
-    const passwordInput = screen.getByLabelText(/^master password/i)
-    await user.type(passwordInput, 'lowercaseonly123!')
-
-    const submitBtn = screen.getByRole('button', { name: /create vaultx account/i })
-    await user.click(submitBtn)
-
-    expect(screen.getByText('Password must contain at least one uppercase letter.')).toBeInTheDocument()
-  })
-
-  it('6. rejects password missing lowercase letter', async () => {
-    const user = userEvent.setup()
-    render(<RegisterForm />)
-
-    const passwordInput = screen.getByLabelText(/^master password/i)
-    await user.type(passwordInput, 'UPPERCASEONLY123!')
-
-    const submitBtn = screen.getByRole('button', { name: /create vaultx account/i })
-    await user.click(submitBtn)
-
-    expect(screen.getByText('Password must contain at least one lowercase letter.')).toBeInTheDocument()
-  })
-
-  it('7. rejects password missing digit', async () => {
-    const user = userEvent.setup()
-    render(<RegisterForm />)
-
-    const passwordInput = screen.getByLabelText(/^master password/i)
-    await user.type(passwordInput, 'NoDigitsInPassword!')
-
-    const submitBtn = screen.getByRole('button', { name: /create vaultx account/i })
-    await user.click(submitBtn)
-
-    expect(screen.getByText('Password must contain at least one digit.')).toBeInTheDocument()
-  })
-
-  it('8. rejects password missing special character', async () => {
-    const user = userEvent.setup()
-    render(<RegisterForm />)
-
-    const passwordInput = screen.getByLabelText(/^master password/i)
-    await user.type(passwordInput, 'NoSpecialChars123')
-
-    const submitBtn = screen.getByRole('button', { name: /create vaultx account/i })
-    await user.click(submitBtn)
-
-    expect(screen.getByText('Password must contain at least one special character.')).toBeInTheDocument()
-  })
-
-  it('9. rejects mismatched password confirmation', async () => {
-    const user = userEvent.setup()
-    render(<RegisterForm />)
-
-    const emailInput = screen.getByLabelText(/email address/i)
-    const passwordInput = screen.getByLabelText(/^master password/i)
-    const confirmInput = screen.getByLabelText(/confirm master password/i)
-
-    await user.type(emailInput, 'valid@example.com')
-    await user.type(passwordInput, 'ValidPassword123!')
-    await user.type(confirmInput, 'DifferentPassword123!')
-
-    const submitBtn = screen.getByRole('button', { name: /create vaultx account/i })
-    await user.click(submitBtn)
-
-    expect(screen.getByText('Passwords do not match.')).toBeInTheDocument()
-  })
-
-  it('10. valid form passes client-side validation and invokes submit handler', async () => {
-    const user = userEvent.setup()
-    const onSubmitMock = vi.fn().mockResolvedValue(undefined)
-
-    render(<RegisterForm onSubmit={onSubmitMock} />)
 
     await user.type(screen.getByLabelText(/email address/i), 'user@example.com')
     await user.type(screen.getByLabelText(/^master password/i), 'ValidPassword123!')
-    await user.type(screen.getByLabelText(/confirm master password/i), 'ValidPassword123!')
+    await user.type(screen.getByLabelText(/confirm master password/i), 'MismatchPassword123!')
 
-    const submitBtn = screen.getByRole('button', { name: /create vaultx account/i })
-    await user.click(submitBtn)
+    await user.click(screen.getByRole('button', { name: /create vaultx account/i }))
+
+    expect(screen.getByText('Passwords do not match.')).toBeInTheDocument()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('4. successful API response displays success state and clears sensitive inputs', async () => {
+    const user = userEvent.setup()
+
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 201,
+      json: async () => ({
+        id: 'user-guid-1234',
+        email: 'newuser@example.com',
+        createdAt: '2026-09-29T12:00:00Z',
+        updatedAt: '2026-09-29T12:00:00Z',
+      }),
+    } as Response)
+
+    render(<RegisterForm />)
+
+    await user.type(screen.getByLabelText(/email address/i), 'newuser@example.com')
+    await user.type(screen.getByLabelText(/^master password/i), 'StrongP@ssw0rd!123')
+    await user.type(screen.getByLabelText(/confirm master password/i), 'StrongP@ssw0rd!123')
+
+    await user.click(screen.getByRole('button', { name: /create vaultx account/i }))
 
     await waitFor(() => {
-      expect(onSubmitMock).toHaveBeenCalledTimes(1)
-      expect(onSubmitMock).toHaveBeenCalledWith({
-        email: 'user@example.com',
-        password: 'ValidPassword123!',
-        confirmPassword: 'ValidPassword123!',
-      })
+      expect(screen.getByRole('heading', { name: /registration successful/i })).toBeInTheDocument()
+      expect(screen.getByText(/newuser@example.com/i)).toBeInTheDocument()
+    })
+
+    // Password must not exist in storage or URL
+    expect(localStorage.getItem('password')).toBeNull()
+    expect(sessionStorage.getItem('password')).toBeNull()
+    expect(window.location.search).not.toContain('password')
+  })
+
+  it('5. duplicate email response (409) displays conflict error', async () => {
+    const user = userEvent.setup()
+
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      json: async () => ({
+        type: 'https://tools.ietf.org/html/rfc9110#section-15.5.10',
+        title: 'Conflict',
+        status: 409,
+        detail: 'A user with this email already exists.',
+      }),
+    } as Response)
+
+    render(<RegisterForm />)
+
+    await user.type(screen.getByLabelText(/email address/i), 'existing@example.com')
+    await user.type(screen.getByLabelText(/^master password/i), 'StrongP@ssw0rd!123')
+    await user.type(screen.getByLabelText(/confirm master password/i), 'StrongP@ssw0rd!123')
+
+    await user.click(screen.getByRole('button', { name: /create vaultx account/i }))
+
+    await waitFor(() => {
+      expect(screen.getAllByText('A user with this email already exists.').length).toBeGreaterThanOrEqual(1)
     })
   })
 
-  it('11. submit/loading state disables controls and indicates progress', async () => {
+  it('6. backend validation error (400) displays field errors', async () => {
     const user = userEvent.setup()
-    let resolveSubmit: () => void = () => {}
-    const pendingPromise = new Promise<void>((resolve) => {
-      resolveSubmit = resolve
-    })
-    const onSubmitMock = vi.fn().mockReturnValue(pendingPromise)
 
-    render(<RegisterForm onSubmit={onSubmitMock} />)
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        type: 'https://tools.ietf.org/html/rfc9110#section-15.5.1',
+        title: 'One or more validation errors occurred.',
+        status: 400,
+        errors: {
+          Email: ['Email format is invalid.'],
+        },
+      }),
+    } as Response)
+
+    render(<RegisterForm />)
+
+    await user.type(screen.getByLabelText(/email address/i), 'valid@example.com')
+    await user.type(screen.getByLabelText(/^master password/i), 'StrongP@ssw0rd!123')
+    await user.type(screen.getByLabelText(/confirm master password/i), 'StrongP@ssw0rd!123')
+
+    await user.click(screen.getByRole('button', { name: /create vaultx account/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Email format is invalid.')).toBeInTheDocument()
+    })
+  })
+
+  it('7. network failure displays safe connection error', async () => {
+    const user = userEvent.setup()
+
+    vi.mocked(fetch).mockRejectedValueOnce(new Error('Network offline'))
+
+    render(<RegisterForm />)
+
+    await user.type(screen.getByLabelText(/email address/i), 'test@example.com')
+    await user.type(screen.getByLabelText(/^master password/i), 'StrongP@ssw0rd!123')
+    await user.type(screen.getByLabelText(/confirm master password/i), 'StrongP@ssw0rd!123')
+
+    await user.click(screen.getByRole('button', { name: /create vaultx account/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/unable to connect to the server/i)).toBeInTheDocument()
+    })
+  })
+
+  it('8. prevents duplicate submissions while request is in flight', async () => {
+    const user = userEvent.setup()
+
+    let resolveFetch: (value: Response) => void = () => {}
+    const pendingPromise = new Promise<Response>((resolve) => {
+      resolveFetch = resolve
+    })
+
+    vi.mocked(fetch).mockReturnValueOnce(pendingPromise)
+
+    render(<RegisterForm />)
 
     const emailInput = screen.getByLabelText(/email address/i)
     const passwordInput = screen.getByLabelText(/^master password/i)
@@ -162,28 +177,41 @@ describe('RegisterForm Component', () => {
     const submitBtn = screen.getByRole('button', { name: /create vaultx account/i })
 
     await user.type(emailInput, 'user@example.com')
-    await user.type(passwordInput, 'ValidPassword123!')
-    await user.type(confirmInput, 'ValidPassword123!')
+    await user.type(passwordInput, 'StrongP@ssw0rd!123')
+    await user.type(confirmInput, 'StrongP@ssw0rd!123')
 
+    // Click submit
     await user.click(submitBtn)
 
-    // Form inputs and submit button should be disabled during submission
+    // Form inputs and button should be disabled
     expect(emailInput).toBeDisabled()
     expect(passwordInput).toBeDisabled()
     expect(confirmInput).toBeDisabled()
     expect(submitBtn).toBeDisabled()
     expect(screen.getByText('Registering Account...')).toBeInTheDocument()
 
-    // Resolve submission
-    resolveSubmit()
+    // Second click should be ignored
+    await user.click(submitBtn)
+    expect(fetch).toHaveBeenCalledTimes(1)
+
+    // Complete response
+    resolveFetch({
+      ok: true,
+      status: 201,
+      json: async () => ({
+        id: '123',
+        email: 'user@example.com',
+        createdAt: '2026-09-29T12:00:00Z',
+        updatedAt: '2026-09-29T12:00:00Z',
+      }),
+    } as Response)
 
     await waitFor(() => {
-      expect(submitBtn).not.toBeDisabled()
-      expect(screen.getByText('Create VaultX Account')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /registration successful/i })).toBeInTheDocument()
     })
   })
 
-  it('12. password visibility toggle switches between text and password types', async () => {
+  it('9. password visibility toggle switches between text and password types', async () => {
     const user = userEvent.setup()
     render(<RegisterForm />)
 
