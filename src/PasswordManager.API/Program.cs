@@ -1,6 +1,7 @@
 
-using Microsoft.EntityFrameworkCore;
-using PasswordManager.Infrastructure.Persistence;
+using PasswordManager.API.Middleware;
+using PasswordManager.Application;
+using PasswordManager.Infrastructure;
 
 namespace PasswordManager.API;
 
@@ -10,13 +11,16 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
-        builder.Services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+        builder.Services.AddApplication();
+        builder.Services.AddInfrastructure(builder.Configuration);
+        builder.Services.AddControllers();
 
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
 
         var app = builder.Build();
+
+        app.UseMiddleware<ExceptionHandlingMiddleware>();
 
         if (app.Environment.IsDevelopment())
         {
@@ -25,6 +29,8 @@ public class Program
         }
 
         app.UseHttpsRedirection();
+
+        app.MapControllers();
 
         app.MapGet("/", () => Results.Ok(new
         {
