@@ -1,0 +1,54 @@
+# .NET build output
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# IDE state
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# Local configuration
+.env
+.env.*
+!.env.example
+!.env.*.example
+**/appsettings.Local.json
+**/appsettings.Development.Local.json
+**/appsettings.*.Local.json
+**/appsettings.Development.json
+
+# Secrets and private material
+**/secrets.json
+**/credentials.json
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs and test/build artifacts
+*.log
+logs/
+**/TestResults/
+*.trx
+*.coverage
+*.coveragexml
+coverage/
+artifacts/
+publish/
+
+# Frontend dependencies and generated output
+node_modules/
+dist/
