@@ -52,7 +52,7 @@ Complete
 
 ## Current Status
 
-The project is establishing its architecture and development foundation. Authentication, vault workflows, and frontend functionality are future work.
+Phase 1 (Architecture Foundation) and the Registration vertical slice (Phase 2, Slice 2.1) are complete. The project has implemented backend registration, frontend UI, bidirectional API communication, and end-to-end security verification with 112 passing automated tests. Login, session management, protected routes, and vault encryption workflows remain future work.
 
 ## Branch Strategy
 
@@ -60,7 +60,7 @@ The project is establishing its architecture and development foundation. Authent
 
 ## Security
 
-- Plaintext master passwords must never be persisted; authentication flows are not yet implemented.
+- Plaintext master passwords are never persisted; password hashing uses PBKDF2-HMAC-SHA256 (future Argon2id migration planned).
 - Secrets and local credentials must not be committed to Git.
 - Cryptography will use established primitives and libraries.
 - Security decisions are documented before sensitive functionality is implemented.
