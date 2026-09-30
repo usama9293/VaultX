@@ -79,10 +79,22 @@ describe('RegisterForm Component (Integration)', () => {
       expect(screen.getByText(/newuser@example.com/i)).toBeInTheDocument()
     })
 
-    // Password must not exist in storage or URL
+    // 4. No password is displayed after successful registration
+    expect(screen.queryByText('StrongP@ssw0rd!123')).toBeNull()
+    expect(screen.queryByDisplayValue('StrongP@ssw0rd!123')).toBeNull()
+
+    // 5. No authentication token is created in storage or URL
     expect(localStorage.getItem('password')).toBeNull()
     expect(sessionStorage.getItem('password')).toBeNull()
+    expect(localStorage.getItem('token')).toBeNull()
+    expect(localStorage.getItem('jwt')).toBeNull()
+    expect(sessionStorage.getItem('token')).toBeNull()
+    expect(sessionStorage.getItem('jwt')).toBeNull()
     expect(window.location.search).not.toContain('password')
+
+    // 6. No vault is created
+    expect(localStorage.getItem('vault')).toBeNull()
+    expect(sessionStorage.getItem('vault')).toBeNull()
   })
 
   it('5. duplicate email response (409) displays conflict error', async () => {
@@ -228,5 +240,89 @@ describe('RegisterForm Component (Integration)', () => {
     await user.click(screen.getByRole('button', { name: /hide master password/i }))
 
     expect(passwordInput).toHaveAttribute('type', 'password')
+  })
+
+  it('10. rejects invalid email on client and prevents API call', async () => {
+    const user = userEvent.setup()
+    render(<RegisterForm />)
+
+    await user.type(screen.getByLabelText(/email address/i), 'not-an-email')
+    await user.type(screen.getByLabelText(/^master password/i), 'StrongP@ssw0rd!123')
+    await user.type(screen.getByLabelText(/confirm master password/i), 'StrongP@ssw0rd!123')
+
+    await user.click(screen.getByRole('button', { name: /create vaultx account/i }))
+
+    expect(screen.getByText('Email format is invalid.')).toBeInTheDocument()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('11. rejects short password on client and prevents API call', async () => {
+    const user = userEvent.setup()
+    render(<RegisterForm />)
+
+    await user.type(screen.getByLabelText(/email address/i), 'valid@example.com')
+    await user.type(screen.getByLabelText(/^master password/i), 'weak')
+    await user.type(screen.getByLabelText(/confirm master password/i), 'weak')
+
+    await user.click(screen.getByRole('button', { name: /create vaultx account/i }))
+
+    expect(screen.getByText('Password must be at least 12 characters long.')).toBeInTheDocument()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('12. rejects missing uppercase on client and prevents API call', async () => {
+    const user = userEvent.setup()
+    render(<RegisterForm />)
+
+    await user.type(screen.getByLabelText(/email address/i), 'valid@example.com')
+    await user.type(screen.getByLabelText(/^master password/i), 'alllowercase123!@#')
+    await user.type(screen.getByLabelText(/confirm master password/i), 'alllowercase123!@#')
+
+    await user.click(screen.getByRole('button', { name: /create vaultx account/i }))
+
+    expect(screen.getByText('Password must contain at least one uppercase letter.')).toBeInTheDocument()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('13. rejects missing lowercase on client and prevents API call', async () => {
+    const user = userEvent.setup()
+    render(<RegisterForm />)
+
+    await user.type(screen.getByLabelText(/email address/i), 'valid@example.com')
+    await user.type(screen.getByLabelText(/^master password/i), 'ALLUPPERCASE123!@#')
+    await user.type(screen.getByLabelText(/confirm master password/i), 'ALLUPPERCASE123!@#')
+
+    await user.click(screen.getByRole('button', { name: /create vaultx account/i }))
+
+    expect(screen.getByText('Password must contain at least one lowercase letter.')).toBeInTheDocument()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('14. rejects missing digit on client and prevents API call', async () => {
+    const user = userEvent.setup()
+    render(<RegisterForm />)
+
+    await user.type(screen.getByLabelText(/email address/i), 'valid@example.com')
+    await user.type(screen.getByLabelText(/^master password/i), 'NoDigitsAtAll!@#Aa')
+    await user.type(screen.getByLabelText(/confirm master password/i), 'NoDigitsAtAll!@#Aa')
+
+    await user.click(screen.getByRole('button', { name: /create vaultx account/i }))
+
+    expect(screen.getByText('Password must contain at least one digit.')).toBeInTheDocument()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('15. rejects missing special character on client and prevents API call', async () => {
+    const user = userEvent.setup()
+    render(<RegisterForm />)
+
+    await user.type(screen.getByLabelText(/email address/i), 'valid@example.com')
+    await user.type(screen.getByLabelText(/^master password/i), 'NoSpecialChars123Aa')
+    await user.type(screen.getByLabelText(/confirm master password/i), 'NoSpecialChars123Aa')
+
+    await user.click(screen.getByRole('button', { name: /create vaultx account/i }))
+
+    expect(screen.getByText('Password must contain at least one special character.')).toBeInTheDocument()
+    expect(fetch).not.toHaveBeenCalled()
   })
 })
