@@ -42,9 +42,9 @@ ASP.NET Core API Pipeline
   ├─ AuthController receives RegisterUserRequest
   │
   ▼
-Application Layer (MediatR Command Pipeline)
+Application Layer (Command & Handler Architecture)
   │
-  ├─ FluentValidation Validator (Authoritative Security Boundary)
+  ├─ Application Command Validator (Authoritative Security Boundary)
   │    - Email syntax & length <= 320 chars
   │    - Password complexity (12-128 chars, uppercase, lowercase, digit, special)
   │    - ConfirmPassword match
@@ -178,7 +178,7 @@ Validation operates on both tiers with clear boundaries of trust:
    - Never trusted as a security boundary.
 
 2. **Server-Side Validation (Backend Authority):**
-   - Enforced by `RegisterUserCommandValidator` (FluentValidation) in the application pipeline.
+   - Enforced by `RegisterUserCommandValidator` (custom pure C# validator) in the application pipeline.
    - Authoritative security boundary against direct HTTP attacks, bypasses, or malformed tools.
 
 ### Rule Matrix
@@ -206,7 +206,7 @@ The backend strictly conforms to Clean Architecture and DDD principles:
 ```text
 PasswordManager.API (Presentation)
   │
-  ├── Controllers/AuthController.cs         # Thin endpoint delegating to MediatR
+  ├── Controllers/AuthController.cs         # Thin endpoint delegating to IRegisterUserHandler
   ├── Middleware/ExceptionHandlingMiddleware # Centralized RFC 9110 error mapping
   └── Program.cs                            # Pipeline, DI, scoped CORS, and EF Core setup
        │
@@ -214,8 +214,8 @@ PasswordManager.API (Presentation)
 PasswordManager.Application (Use Cases)
   │
   ├── Features/Authentication/Register/
-  │    ├── RegisterUserCommand.cs           # IRequest<UserResponse> command record
-  │    ├── RegisterUserCommandValidator.cs  # FluentValidation complexity validator
+  │    ├── RegisterUserCommand.cs           # Command record (Email, Password, ConfirmPassword)
+  │    ├── RegisterUserCommandValidator.cs  # Pure C# static validation logic with compiled regex
   │    ├── IRegisterUserHandler.cs          # Handler abstraction
   │    └── RegisterUserHandler.cs           # Orchestrates normalization, hashing, persistence
   ├── Interfaces/Persistence/
@@ -330,8 +330,8 @@ frontend/src/
 ## 10. Architectural Decisions
 
 1. **Strict Clean Architecture Direction:** Dependency flow points inward: Presentation -> Application -> Domain, with Infrastructure implementing Application abstractions.
-2. **MediatR Decoupled Handler:** Keeps `AuthController` exceptionally thin and reusable across future transport mechanisms (e.g., CLI, gRPC).
-3. **Defense in Depth for Validation:** FluentValidation is the authoritative validation authority; client-side validation is solely an interactive UX enhancement.
+2. **Decoupled Handler Pattern (`IRegisterUserHandler`):** Keeps `AuthController` exceptionally thin and focused solely on HTTP concerns, delegating use-case execution directly to the Application handler interface.
+3. **Defense in Depth for Validation:** Application-level validation (`RegisterUserCommandValidator`) is the authoritative validation authority; client-side validation is solely an interactive UX enhancement.
 4. **Separation of Hashing and Encryption:** The user's master password hash in the database is only for account authentication; it is architecturally distinct from client-derived vault encryption keys.
 5. **No Automatic Authentication on Registration:** Registration completes by confirming account creation and prompting the user to log in, rather than automatically generating authentication tokens or sessions.
 
@@ -361,5 +361,28 @@ The following items were identified and explicitly deferred to their appropriate
 | 6F | Registration E2E & Security Testing | **Complete** |
 | 6G | Registration Documentation & Review | **Complete** |
 
+### Definition of Done Checklist
+
+- [x] Requirement documented
+- [x] Security analysis documented
+- [x] Backend implemented
+- [x] Frontend implemented
+- [x] API integration implemented
+- [x] Database persistence verified
+- [x] Unit tests passing (39 frontend, 39 backend)
+- [x] Integration tests passing (34 backend)
+- [x] Frontend tests passing (39 passed)
+- [x] E2E tests passing
+- [x] Security tests passing
+- [x] Build passing
+- [x] Lint passing
+- [x] Security findings documented
+- [x] Deferred work documented
+- [x] Feature documentation updated
+- [x] Roadmap status updated
+- [x] Product/security specification status updated: **NOT APPLICABLE** (No standalone specification file exists in repository; baseline architectural principles and status are maintained across `README.md`, `VaultX-Product-Development-Security-Roadmap.md`, and `docs/features/registration.md`)
+- [x] Git working tree clean
+- [x] Feature branch pushed
+
 **Definition of Done:** **SATISFIED**  
-The Registration vertical slice is complete, fully tested, documented, and ready for PR review into `develop`.
+The Registration vertical slice is complete, fully tested, accurately documented, and ready for PR review into `develop`.
