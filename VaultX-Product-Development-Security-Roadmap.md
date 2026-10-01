@@ -396,7 +396,7 @@ Test:
 
 ## 6.2 Login
 
-**Status: Backend Complete (Step 4 Complete) ✅**
+**Status: Backend & Frontend Complete (Steps 4 & 5 Complete) ✅**
 
 ### Vertical Slice Lifecycle Summary
 
@@ -404,8 +404,8 @@ Test:
 - **Step 2: Design** — Complete (Architectural contract, JWT short-lived access token, opaque refresh token with HttpOnly cookie)
 - **Step 3: Security Analysis** — Complete (Threat modeling: user enumeration, token theft, token replay, XSS/CSRF mitigations)
 - **Step 4: Backend Implementation** — Complete (Auth API, LoginUserHandler, TokenService, RefreshTokens EF Core migration, 124 passing backend tests)
-- **Step 5: Frontend Implementation** — Planned / Next Step
-- **Step 6: Integration** — Planned
+- **Step 5: Frontend Implementation** — Complete (Login Page, LoginForm, Client Validation, in-memory AuthState/Token storage, 64 passing frontend tests)
+- **Step 6: Integration** — Planned / Next Step
 - **Step 7: End-to-End Testing** — Planned
 - **Step 8: Security Testing** — Planned
 - **Step 9: Documentation** — In Progress (`docs/features/login.md`)

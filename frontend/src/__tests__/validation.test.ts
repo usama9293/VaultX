@@ -5,6 +5,8 @@ import {
   validateEmail,
   validatePassword,
   validateRegisterForm,
+  validateLoginPassword,
+  validateLoginForm,
 } from '../utils/validation'
 
 describe('Validation Utilities', () => {
@@ -127,4 +129,47 @@ describe('Validation Utilities', () => {
       expect(Object.keys(errors)).toHaveLength(0)
     })
   })
+
+  describe('validateLoginPassword', () => {
+    it('rejects empty password', () => {
+      expect(validateLoginPassword('')).toBe('Password is required.')
+    })
+
+    it('accepts any non-empty password without enforcing registration complexity policy', () => {
+      expect(validateLoginPassword('simple')).toBeNull()
+      expect(validateLoginPassword('ValidPassword123!')).toBeNull()
+    })
+  })
+
+  describe('validateLoginForm', () => {
+    it('returns all errors for empty form data', () => {
+      const errors = validateLoginForm({
+        email: '',
+        password: '',
+      })
+
+      expect(errors.email).toBe('Email is required.')
+      expect(errors.password).toBe('Password is required.')
+    })
+
+    it('rejects invalid email format', () => {
+      const errors = validateLoginForm({
+        email: 'invalid-email',
+        password: 'anyPassword',
+      })
+
+      expect(errors.email).toBe('Email format is invalid.')
+      expect(errors.password).toBeUndefined()
+    })
+
+    it('returns empty error map for valid form data', () => {
+      const errors = validateLoginForm({
+        email: 'user@example.com',
+        password: 'anyPassword',
+      })
+
+      expect(Object.keys(errors)).toHaveLength(0)
+    })
+  })
 })
+

@@ -1,4 +1,4 @@
-import type { FormErrors, PasswordCriteria, RegisterFormData } from '../types/auth'
+import type { FormErrors, LoginFormData, LoginFormErrors, PasswordCriteria, RegisterFormData } from '../types/auth'
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
 
@@ -94,3 +94,28 @@ export function validateRegisterForm(data: RegisterFormData): FormErrors {
 
   return errors
 }
+
+export function validateLoginPassword(password: string): string | null {
+  if (!password) {
+    return 'Password is required.'
+  }
+
+  return null
+}
+
+export function validateLoginForm(data: LoginFormData): LoginFormErrors {
+  const errors: LoginFormErrors = {}
+
+  const emailError = validateEmail(data.email)
+  if (emailError) {
+    errors.email = emailError
+  }
+
+  const passwordError = validateLoginPassword(data.password)
+  if (passwordError) {
+    errors.password = passwordError
+  }
+
+  return errors
+}
+

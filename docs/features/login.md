@@ -1,8 +1,8 @@
-# Login Feature Specification & Backend Documentation
+# Login Feature Specification & Implementation Documentation
 
 **Feature:** User Login & Authentication  
-**Vertical Slice:** Phase 2, Slice 2.2  
-**Status:** Backend Implementation Complete (Step 4)  
+**Vertical Slice:** Phase 2, Section 6.2 (Login)  
+**Status:** Backend & Frontend Implementation Complete (Steps 4 & 5)  
 **Date:** October 2026  
 
 ---
@@ -192,50 +192,98 @@ Configured via `AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwt
 
 ---
 
-## 5. Security Threats & Defenses
+## 5. Frontend Architecture & In-Memory State
+
+### Component Architecture
+- **LoginForm (`src/components/LoginForm.tsx`):**
+  - Controlled inputs for `email` and `password`.
+  - Accessible master password visibility toggle button ("Show" / "Hide").
+  - Form validation errors displayed beneath corresponding inputs with `aria-describedby` and `aria-invalid`.
+  - Global error alert banner with `role="alert"` for authentication failures (generic 401) and connectivity issues.
+  - Loading state disables submission button and renders a spinner while in flight.
+  - Sensitive password fields are wiped from component state immediately upon submission.
+  - When authenticated, renders a clean session indicator card without exposing tokens or internal identifiers.
+- **LoginForm Styles (`src/components/LoginForm.css`):**
+  - Reuses design system CSS custom properties from `index.css` and layout patterns from `RegisterForm.css`.
+
+### Client-Side Validation
+- Pure TypeScript functions in `src/utils/validation.ts`:
+  - `validateEmail(email)`: Ensures presence, max length (320), and format validity.
+  - `validateLoginPassword(password)`: Ensures presence without client-enforcing registration complexity policies.
+  - `validateLoginForm(data)`: Combines checks into a strongly-typed `LoginFormErrors` object.
+
+### Login API Client
+- `loginUser(request: LoginRequest): Promise<LoginResponse>` in `src/api/auth.ts`:
+  - Sends `POST /api/auth/login` with `Content-Type: application/json` and `credentials: 'include'`.
+  - `credentials: 'include'` allows the browser to receive and manage the backend's `HttpOnly` refresh token cookie.
+  - Maps HTTP 401 to generic `Invalid email or password.` message to preserve user-enumeration resistance.
+  - Maps HTTP 400 validation errors to clean client error messages.
+  - Maps unexpected HTTP 500 / server responses to safe generic text: `Unable to sign in right now. Please try again.`
+
+### Access Token Storage — In-Memory React State
+- Managed via `AuthProvider` and `useAuth` hook in `src/context/`:
+  - Access token and expiration timestamp are held **strictly in React component memory (`useState`)**.
+  - **Zero Persistent Storage:** The access token is never written to `localStorage`, `sessionStorage`, `IndexedDB`, or JavaScript-accessible cookies.
+  - **Zero URL Exposure:** The access token is never placed in URL query parameters, hash fragments, or navigation paths.
+  - **Zero Token Logging:** The token is never written to `console.log`, `console.info`, or error outputs.
+  - **Refresh Token Boundary:** The refresh token cookie is `HttpOnly`; JavaScript cannot and does not read it (`document.cookie` is untouched).
+
+---
+
+## 6. Security Threats & Defenses
 
 | Threat | Defense | Verification | Status |
 |---|---|---|---|
-| User enumeration | Generic authentication failure (`"Invalid email or password."`) returned for both nonexistent emails and wrong passwords. | Integration test | Verified |
-| Password exposure | Plaintext password is never logged, persisted, returned in responses, or stored in cookies. Processed only in-memory during verification. | Security test | Verified |
+| User enumeration | Generic authentication failure (`"Invalid email or password."`) returned for both nonexistent emails and wrong passwords. | Integration & Frontend test | Verified |
+| Password exposure | Plaintext password is never logged, persisted, returned in responses, or stored in cookies. Processed only in-memory and wiped from component state. | Security test | Verified |
 | JavaScript access to refresh token | Transmitted solely via secure `HttpOnly` cookie with `Path=/api/auth`. HttpOnly prevents JavaScript from directly reading the refresh-token cookie; XSS itself is not fully prevented by this feature. | Security test | Verified |
 | Database exposure of refresh tokens | The raw refresh token is not stored in PostgreSQL; only its SHA-256 hash is stored, so database contents do not directly expose the refresh-token cookie value. | Integration & DB test | Verified |
 | Refresh-token replay | Revocation/rotation foundation exists; full replay protection will be implemented with the refresh-token endpoint. | Unit & entity test | Foundation only / Deferred |
 | Access-token exposure | Short 15-minute token lifetime and in-memory client storage minimize the window of vulnerability. Excluded from persistent server storage. | Security test | Verified |
+| Access-token persistent storage leakage | Access token is held strictly in React memory; never stored in `localStorage`, `sessionStorage`, `IndexedDB`, or URL parameters. | Frontend Security test | Verified |
 | JWT tampering | Cryptographically signed using HMAC-SHA256 with a 256-bit secret key; unauthorized signatures or modified payloads fail verification. | Integration test | Verified |
 | Expired JWT reuse | Strict lifetime verification with zero clock skew (`ClockSkew = TimeSpan.Zero`) rejects expired JWTs. | Integration test | Verified |
-| Error disclosure | Centralized `ExceptionHandlingMiddleware` ensures sanitized RFC 9110 ProblemDetails with no stack traces or database detail leaks. | Security test | Verified |
+| Error disclosure | Centralized `ExceptionHandlingMiddleware` and frontend API client ensure sanitized ProblemDetails and generic safe messages. | Security test | Verified |
 | CORS abuse | Scoped to explicitly allowed development origins (`http://localhost:5173`, etc.) with `AllowCredentials()`. Wildcards rejected. | Security test | Verified |
 | Rate limiting / brute-force protection | Not currently implemented; planned as security hardening against automated credential stuffing and brute-force attacks | Deferred security hardening | Deferred |
 
 ---
 
-## 6. Testing Summary
+## 7. Testing Summary
 
 ### Automated Test Results
 
-- **Unit Tests (`PasswordManager.UnitTests`):** 68 / 68 passed
-  - `LoginCommandValidatorTests`: 5 tests (empty, whitespace, invalid formats, oversized email, empty password, valid command)
-  - `RefreshTokenTests`: 6 tests (constructor invariants, active checks, expiration, revocation, replacement)
-  - `TokenServiceTests`: 4 tests (JWT claims, signature validation, random entropy, deterministic SHA-256 hashing)
-  - `LoginUserHandlerTests`: 3 tests (valid login, nonexistent user, wrong password, email normalization, hashing)
-- **Integration Tests (`PasswordManager.IntegrationTests`):** 56 / 56 passed
-  - `AuthControllerLoginIntegrationTests`: 8 tests (valid login, metadata sanitization, DB persistence, multiple sessions, wrong password, nonexistent email, case-insensitivity, validation bypass)
-  - `LoginSecurityTests`: 9 tests (JWT middleware access, 401 without token, 401 tampered token, 401 expired token, cookie security attributes, CORS with credentials, CORS disallowed origins, malformed JSON sanitization, HTTP method restrictions)
-  - Existing Registration tests: 34 / 34 passed with 0 regressions
+- **Backend Unit Tests (`PasswordManager.UnitTests`):** 68 / 68 passed
+  - `LoginCommandValidatorTests`: 5 tests
+  - `RefreshTokenTests`: 6 tests
+  - `TokenServiceTests`: 4 tests
+  - `LoginUserHandlerTests`: 3 tests
+  - Existing Registration unit tests: 50 tests
+- **Backend Integration Tests (`PasswordManager.IntegrationTests`):** 56 / 56 passed
+  - `AuthControllerLoginIntegrationTests`: 8 tests
+  - `LoginSecurityTests`: 9 tests
+  - Existing Registration integration & security tests: 39 tests
+- **Frontend Test Suite (`vitest`):** 64 / 64 passed
+  - `validation.test.ts`: 24 tests (includes 5 new login validation tests)
+  - `authApi.test.ts`: 10 tests (includes 5 new `loginUser` tests)
+  - `LoginForm.test.tsx`: 15 tests (UI rendering, validation, loading state, duplicate submission protection, 401 error handling, in-memory auth state, localStorage/sessionStorage/URL/console isolation)
+  - `RegisterForm.test.tsx`: 15 tests (regression suite with 0 regressions)
 - **Total Backend Tests:** **124 / 124 passed (100%)**
-- **Frontend Regression Suite:** 39 / 39 passed (100%)
+- **Total Frontend Tests:** **64 / 64 passed (100%)**
+- **Linter & Typecheck:** 0 warnings, 0 errors (`oxlint` + `tsc -b`)
 
 ---
 
-## 7. Deferred Work
+## 8. Deferred Work
 
-The following items are outside the scope of Step 4 (Login Backend) and are deferred to their designated roadmap slices:
+The following items are outside the scope of Step 5 (Login Frontend) and are deferred to subsequent lifecycle steps or future roadmap phases:
 
-1. **Login Frontend UI:** Deferred to Step 5 (Login Frontend Implementation).
+1. **Step 6 — Integration:** Live connection between Login UI and API within the Login vertical slice lifecycle.
 2. **Token Refresh Endpoint (`POST /api/auth/refresh`):** Revocation/rotation foundation exists; full replay protection will be implemented with the refresh-token endpoint.
-3. **Logout Endpoint (`POST /api/auth/logout`):** Deferred to dedicated Logout vertical slice.
-4. **Protected Product Routes & Policies:** Deferred to Protected Routes vertical slice.
+3. **Logout Endpoint (`POST /api/auth/logout`):** Phase 2, Section 6.3 (Logout).
+4. **Protected Routes:** Phase 2, Section 6.4 (Protected Routes).
 5. **Rate Limiting & Brute-Force Protection:** Deferred security hardening work.
-6. **Multi-Factor Authentication (MFA / TOTP):** Future/deferred functionality according to the roadmap (Phase 9 — TOTP / 2FA).
+6. **Multi-Factor Authentication (MFA / TOTP):** Phase 9 (TOTP / 2FA).
 7. **Production HTTPS / HSTS & CSP Header Enforcement:** Deferred to production infrastructure configuration.
+
+
