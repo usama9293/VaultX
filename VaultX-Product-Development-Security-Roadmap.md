@@ -396,14 +396,34 @@ Test:
 
 ## 6.2 Login
 
-Implement:
+**Status: Backend Complete (Step 4 Complete) ✅**
 
-- Login API
-- Authentication logic
-- Session/token architecture
-- Login UI
-- Authentication state
-- Error handling
+### Vertical Slice Lifecycle Summary
+
+- **Step 1: Requirement** — Complete (Defined user login needs, single-session & multi-device requirements, acceptance criteria)
+- **Step 2: Design** — Complete (Architectural contract, JWT short-lived access token, opaque refresh token with HttpOnly cookie)
+- **Step 3: Security Analysis** — Complete (Threat modeling: user enumeration, token theft, token replay, XSS/CSRF mitigations)
+- **Step 4: Backend Implementation** — Complete (Auth API, LoginUserHandler, TokenService, RefreshTokens EF Core migration, 124 passing backend tests)
+- **Step 5: Frontend Implementation** — Planned / Next Step
+- **Step 6: Integration** — Planned
+- **Step 7: End-to-End Testing** — Planned
+- **Step 8: Security Testing** — Planned
+- **Step 9: Documentation** — In Progress (`docs/features/login.md`)
+- **Step 10: Complete** — Pending Frontend and End-to-End steps
+
+### Backend Implementation Summary
+
+Implemented:
+
+- `POST /api/auth/login` endpoint
+- Email normalization and validation
+- Credential verification with generic error response (`Invalid email or password.`)
+- Short-lived JWT access token generation (HMAC-SHA256, 15 min)
+- Opaque cryptographically secure refresh token (CSPRNG, SHA-256 hashed persistence)
+- Secure HttpOnly refresh token cookie
+- ASP.NET Core JWT authentication & authorization middleware
+- `RefreshTokens` PostgreSQL database migration
+- Clean Architecture contracts (`ILoginUserHandler`, `ITokenService`, `IRefreshTokenRepository`)
 
 Flow:
 

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using PasswordManager.Application.DTOs.Authentication;
+using PasswordManager.Application.Features.Authentication.Login;
 using PasswordManager.Application.Features.Authentication.Register;
 
 namespace PasswordManager.API.Controllers;
@@ -9,10 +10,17 @@ namespace PasswordManager.API.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IRegisterUserHandler _registerUserHandler;
+    private readonly ILoginUserHandler _loginUserHandler;
+    private readonly IWebHostEnvironment _environment;
 
-    public AuthController(IRegisterUserHandler registerUserHandler)
+    public AuthController(
+        IRegisterUserHandler registerUserHandler,
+        ILoginUserHandler loginUserHandler,
+        IWebHostEnvironment environment)
     {
         _registerUserHandler = registerUserHandler ?? throw new ArgumentNullException(nameof(registerUserHandler));
+        _loginUserHandler = loginUserHandler ?? throw new ArgumentNullException(nameof(loginUserHandler));
+        _environment = environment ?? throw new ArgumentNullException(nameof(environment));
     }
 
     [HttpPost("register")]
@@ -30,5 +38,32 @@ public class AuthController : ControllerBase
         var response = await _registerUserHandler.HandleAsync(command, cancellationToken);
 
         return StatusCode(StatusCodes.Status201Created, response);
+    }
+
+    [HttpPost("login")]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
+    {
+        var command = new LoginCommand(
+            request.Email,
+            request.Password);
+
+        var result = await _loginUserHandler.HandleAsync(command, cancellationToken);
+
+        var cookieOptions = new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = !_environment.IsDevelopment() || Request.IsHttps,
+            SameSite = SameSiteMode.Lax,
+            Expires = result.RefreshTokenExpiresAt,
+            Path = "/api/auth"
+        };
+
+        Response.Cookies.Append("refreshToken", result.RawRefreshToken, cookieOptions);
+
+        return Ok(new LoginResponse(result.AccessToken, result.AccessTokenExpiresAt));
     }
 }

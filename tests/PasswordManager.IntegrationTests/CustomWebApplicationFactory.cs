@@ -17,6 +17,8 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
     {
         builder.ConfigureServices(services =>
         {
+            services.AddControllers().AddApplicationPart(typeof(CustomWebApplicationFactory).Assembly);
+
             services.RemoveAll(typeof(DbContextOptions<ApplicationDbContext>));
 
             _connection = new SqliteConnection("DataSource=:memory:");

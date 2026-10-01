@@ -1,0 +1,138 @@
+using System.Text;
+using Moq;
+using PasswordManager.Application.Exceptions;
+using PasswordManager.Application.Features.Authentication.Login;
+using PasswordManager.Application.Interfaces;
+using PasswordManager.Application.Interfaces.Authentication;
+using PasswordManager.Application.Interfaces.Persistence;
+using PasswordManager.Application.Interfaces.Security;
+using PasswordManager.Domain.Entities;
+using Xunit;
+
+namespace PasswordManager.UnitTests.Application;
+
+public class LoginUserHandlerTests
+{
+    private readonly Mock<IUserRepository> _userRepositoryMock = new();
+    private readonly Mock<IRefreshTokenRepository> _refreshTokenRepositoryMock = new();
+    private readonly Mock<IPasswordHasher> _passwordHasherMock = new();
+    private readonly Mock<ITokenService> _tokenServiceMock = new();
+    private readonly Mock<IUnitOfWork> _unitOfWorkMock = new();
+    private readonly LoginUserHandler _handler;
+
+    public LoginUserHandlerTests()
+    {
+        _handler = new LoginUserHandler(
+            _userRepositoryMock.Object,
+            _refreshTokenRepositoryMock.Object,
+            _passwordHasherMock.Object,
+            _tokenServiceMock.Object,
+            _unitOfWorkMock.Object);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ValidCredentials_ReturnsLoginResultAndPersistsHashedRefreshToken()
+    {
+        // Arrange
+        const string email = "user@example.com";
+        const string password = "StrongPassword123!";
+        const string storedHash = "$pbkdf2-sha256$i=100000$salt$hash";
+        var user = new User(email, Encoding.UTF8.GetBytes(storedHash));
+
+        var command = new LoginCommand("  User@Example.COM  ", password);
+
+        _userRepositoryMock
+            .Setup(r => r.GetByEmailAsync(email, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        _passwordHasherMock
+            .Setup(h => h.VerifyPasswordAsync(password, storedHash, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        const string accessToken = "valid.jwt.access.token";
+        var accessExpiresAt = DateTime.UtcNow.AddMinutes(15);
+        _tokenServiceMock
+            .Setup(t => t.GenerateAccessToken(user))
+            .Returns((accessToken, accessExpiresAt));
+
+        const string rawRefreshToken = "raw-refresh-token-value";
+        const string tokenHash = "hashed-refresh-token-value";
+        var refreshExpiresAt = DateTime.UtcNow.AddDays(7);
+        _tokenServiceMock
+            .Setup(t => t.GenerateRefreshToken())
+            .Returns((rawRefreshToken, tokenHash, refreshExpiresAt));
+
+        RefreshToken? capturedToken = null;
+        _refreshTokenRepositoryMock
+            .Setup(r => r.AddAsync(It.IsAny<RefreshToken>(), It.IsAny<CancellationToken>()))
+            .Callback<RefreshToken, CancellationToken>((rt, _) => capturedToken = rt)
+            .Returns(Task.CompletedTask);
+
+        _unitOfWorkMock
+            .Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        // Act
+        var result = await _handler.HandleAsync(command);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(accessToken, result.AccessToken);
+        Assert.Equal(accessExpiresAt, result.AccessTokenExpiresAt);
+        Assert.Equal(rawRefreshToken, result.RawRefreshToken);
+        Assert.Equal(refreshExpiresAt, result.RefreshTokenExpiresAt);
+
+        // Verify refresh token entity
+        Assert.NotNull(capturedToken);
+        Assert.Equal(user.Id, capturedToken.UserId);
+        Assert.Equal(tokenHash, capturedToken.TokenHash);
+        Assert.NotEqual(rawRefreshToken, capturedToken.TokenHash); // Raw token is NOT persisted
+
+        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleAsync_NonexistentUser_ThrowsGenericInvalidCredentialsException()
+    {
+        // Arrange
+        var command = new LoginCommand("nonexistent@example.com", "SomePassword123!");
+
+        _userRepositoryMock
+            .Setup(r => r.GetByEmailAsync("nonexistent@example.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((User?)null);
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<InvalidCredentialsException>(() => _handler.HandleAsync(command));
+        Assert.Equal("Invalid email or password.", ex.Message);
+
+        _passwordHasherMock.Verify(h => h.VerifyPasswordAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _tokenServiceMock.Verify(t => t.GenerateAccessToken(It.IsAny<User>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAsync_IncorrectPassword_ThrowsGenericInvalidCredentialsException()
+    {
+        // Arrange
+        const string email = "user@example.com";
+        const string wrongPassword = "WrongPassword123!";
+        const string storedHash = "$pbkdf2-sha256$i=100000$salt$hash";
+        var user = new User(email, Encoding.UTF8.GetBytes(storedHash));
+
+        var command = new LoginCommand(email, wrongPassword);
+
+        _userRepositoryMock
+            .Setup(r => r.GetByEmailAsync(email, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        _passwordHasherMock
+            .Setup(h => h.VerifyPasswordAsync(wrongPassword, storedHash, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<InvalidCredentialsException>(() => _handler.HandleAsync(command));
+        Assert.Equal("Invalid email or password.", ex.Message);
+
+        _tokenServiceMock.Verify(t => t.GenerateAccessToken(It.IsAny<User>()), Times.Never);
+        _tokenServiceMock.Verify(t => t.GenerateRefreshToken(), Times.Never);
+    }
+}

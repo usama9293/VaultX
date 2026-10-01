@@ -341,7 +341,7 @@ frontend/src/
 
 The following items were identified and explicitly deferred to their appropriate future roadmap phases:
 
-1. **Registration Rate Limiting / Abuse Protection:** Deferred to Phase 4 (API Security Hardening) to implement IP/identity rate limiting with distributed cache support.
+1. **Registration Rate Limiting / Abuse Protection:** Deferred security hardening work to implement IP/identity rate limiting with distributed cache support.
 2. **IDOR / Authorization Verification:** Registration is an unauthenticated resource creation endpoint; IDOR authorization testing is deferred until authenticated resource endpoints exist.
 3. **Production HTTPS & HSTS:** Deferred to production infrastructure and deployment environment configuration.
 4. **Production CSP & Advanced Security Headers:** Deferred to production reverse proxy / gateway configuration.
