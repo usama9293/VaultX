@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using PasswordManager.Application.Features.Authentication.Login;
+using PasswordManager.Application.Features.Authentication.Logout;
 using PasswordManager.Application.Features.Authentication.Register;
 
 namespace PasswordManager.Application;
@@ -10,6 +11,7 @@ public static class DependencyInjection
     {
         services.AddScoped<IRegisterUserHandler, RegisterUserHandler>();
         services.AddScoped<ILoginUserHandler, LoginUserHandler>();
+        services.AddScoped<ILogoutUserHandler, LogoutUserHandler>();
         return services;
     }
 }

@@ -481,11 +481,40 @@ Authenticated Frontend
 
 ## 6.3 Logout
 
-Implement:
+**Status: Step 4 — Backend Implementation Complete ✅ (Steps 5–10 Pending)**
 
-- Logout behavior
-- Client authentication-state cleanup
-- Session invalidation where applicable
+### Vertical Slice Lifecycle Summary
+
+- **Step 1: Requirement** — Complete (Single-session revocation, idempotent logout, cookie clearing, stateless JWT lifetime boundary)
+- **Step 2: Design** — Complete (API contract: `POST /api/auth/logout`, cookie-based session identification, HTTP 204 No Content response)
+- **Step 3: Security Analysis** — Complete (Threat modeling: session isolation, token oracle defense, sensitive data exposure defense, CSRF boundary)
+- **Step 4: Backend Implementation** — Complete (`POST /api/auth/logout`, `ILogoutUserHandler`, `LogoutUserHandler`, single-session revocation, HttpOnly cookie deletion, idempotent 204 response, 173 total passing backend tests including 22 Logout-specific tests)
+- **Step 5: Frontend Implementation** — Pending
+- **Step 6: Integration** — Pending
+- **Step 7: End-to-End Testing** — Pending
+- **Step 8: Security Testing** — Pending
+- **Step 9: Documentation** — In Progress (`docs/features/logout.md` created for Step 4)
+- **Step 10: Complete** — Pending
+
+### Backend Implementation Summary
+
+Implemented:
+
+- `POST /api/auth/logout` endpoint in `AuthController`
+- `LogoutCommand` and `ILogoutUserHandler` / `LogoutUserHandler` in Application layer
+- Session identification exclusively via `refreshToken` HttpOnly cookie
+- Single-session revocation (only target session is revoked; other sessions for the user remain active)
+- Idempotent revocation behavior (already-revoked and expired tokens return 204 without side effects)
+- Token oracle defense (missing, unknown, or malformed tokens return 204 without exposing database status)
+- HttpOnly cookie clearing matching creation configuration (`Path=/api/auth`, `SameSite=Lax`, `HttpOnly=true`)
+- HTTP 204 No Content response with empty body (no sensitive token or user leakage)
+- Rejection of unsupported HTTP methods (`GET`, `PUT`, `PATCH`, `DELETE`) with HTTP 405 Method Not Allowed
+- Safe unhandled error handling without stack trace or connection string exposure
+
+### Architectural Constraints & Limitations
+
+- **Stateless JWT Access Token Limitation:** Access tokens are short-lived, stateless JWTs and are not blacklisted on logout. An access token remains cryptographically valid until its expiration (approximately 15 minutes). Logout immediately invalidates the persistent refresh-token session.
+- **Multiple Session Isolation:** Only the session matching the provided `refreshToken` cookie is revoked. Other active sessions belonging to the user remain active. Global logout is deferred to future session management work.
 
 ---
 
