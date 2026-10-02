@@ -423,4 +423,48 @@ describe('LoginForm Component (Integration & Security)', () => {
       expect(document.cookie).not.toContain('refreshToken')
     })
   })
+
+  describe('7. Advanced Security & XSS Boundaries (Step 8)', () => {
+    it('safely handles malicious XSS payloads in inputs without script execution or HTML injection', async () => {
+      const user = userEvent.setup()
+      renderLoginForm()
+
+      const xssPayload = '<img src="x" />'
+      const emailInput = screen.getByLabelText(/email address/i)
+      await user.type(emailInput, xssPayload)
+
+      expect(emailInput).toHaveValue(xssPayload)
+
+      const submitBtn = screen.getByRole('button', { name: /sign in to vaultx/i })
+      await user.click(submitBtn)
+
+      expect(screen.getByText('Email format is invalid.')).toBeInTheDocument()
+      expect(document.querySelector('img[src="x"]')).toBeNull()
+    })
+
+    it('safely renders unexpected server errors with generic fallback', async () => {
+      const user = userEvent.setup()
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => ({
+          detail: 'Database connection failed',
+        }),
+      } as Response)
+
+      renderLoginForm()
+
+      await user.type(screen.getByLabelText(/email address/i), 'user@example.com')
+      await user.type(screen.getByLabelText(/^master password/i), 'Password123!')
+      await user.click(screen.getByRole('button', { name: /sign in to vaultx/i }))
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toBeInTheDocument()
+      })
+
+      expect(screen.getByRole('alert')).toHaveTextContent('Unable to sign in right now. Please try again.')
+      expect(document.querySelector('script')).toBeNull()
+    })
+  })
 })

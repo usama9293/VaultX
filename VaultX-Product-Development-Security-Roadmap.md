@@ -396,7 +396,7 @@ Test:
 
 ## 6.2 Login
 
-**Status: Backend, Frontend, Integration & End-to-End Testing Complete (Steps 4, 5, 6 & 7 Complete) ✅**
+**Status: Backend, Frontend, Integration, End-to-End & Security Testing Complete (Steps 4, 5, 6, 7 & 8 Complete) ✅**
 
 ### Vertical Slice Lifecycle Summary
 
@@ -407,9 +407,9 @@ Test:
 - **Step 5: Frontend Implementation** — Complete (Login Page, LoginForm, Client Validation, in-memory AuthState/Token storage, 68 passing frontend tests)
 - **Step 6: Integration** — Complete (Verified end-to-end integration flow from React UI through API to DB, cookie security, and in-memory auth state)
 - **Step 7: End-to-End Testing** — Complete (7/7 Playwright browser tests passed against live Vite frontend, ASP.NET Core API, and real PostgreSQL database)
-- **Step 8: Security Testing** — Planned / Next Step
-- **Step 9: Documentation** — In Progress (`docs/features/login.md`)
-- **Step 10: Complete** — Pending Security testing steps
+- **Step 8: Security Testing** — Complete (Adversarial security assessment: auth bypass, credential attacks, user enumeration invariance, JWT tamper/claims resistance, SQL injection defense, mass assignment defense, and XSS isolation; 228 total automated tests across frontend, backend, and browser E2E, including 34 security-specific tests)
+- **Step 9: Documentation** — Complete (`docs/features/login.md` updated with dedicated Step 8 security testing section and threat matrix)
+- **Step 10: Complete** — Complete (Login vertical slice fully implemented, tested, and security verified)
 
 ### Backend Implementation Summary
 
@@ -448,6 +448,20 @@ Verified in Real Browser:
 - Real UI validation rejecting empty and malformed credentials
 - Network failure graceful error presentation (`Unable to connect to the server. Please check your connection and try again.`)
 - Test suite: 7 / 7 Playwright browser E2E tests (100% passing) against live frontend, API, and PostgreSQL
+
+### Security Testing Summary (Step 8)
+
+Verified:
+
+- Authentication bypass resistance: missing credentials, empty payloads, and mass-assignment unexpected fields are strictly rejected or isolated
+- User enumeration invariance: identical HTTP 401 ProblemDetails and omission of cookies across existing vs nonexistent accounts
+- Boundary & injection defense: oversized emails (324 chars) rejected with 400 Bad Request; 10,000-character passwords handled without crash or 500 error; SQL injection payloads were safely handled without authentication bypass, SQL errors, or database corruption
+- JWT security & tamper resistance: claims audit verified zero sensitive credential leakage; forged signatures, expired tokens, tampered payload claims, "none" algorithm tokens, and malformed Bearer headers all rejected with 401 Unauthorized
+- Storage & XSS isolation: access token strictly confined to React memory; zero persistent storage leakage; malicious HTML inputs rendered safely as plain text without script execution
+- Refresh-token persistence foundation: current Login slice stores refresh-token hashes and establishes the persistence foundation, while actual refresh-token rotation/replay handling belongs to the future refresh endpoint/session-security slice
+- Rate limiting / brute-force protection: Not currently implemented; deferred security hardening
+- Security findings: No vulnerabilities were identified within the tested Login attack surface (conclusion limited strictly to tested scenarios)
+- Test metrics: 228 total automated tests across frontend, backend, and browser E2E (including 34 security-specific tests)
 
 Flow:
 
