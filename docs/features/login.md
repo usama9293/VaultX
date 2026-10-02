@@ -2,8 +2,8 @@
 
 **Feature:** User Login & Authentication  
 **Vertical Slice:** Phase 2, Section 6.2 (Login)  
-**Status:** Backend & Frontend Implementation Complete (Steps 4 & 5)  
-**Date:** October 2026  
+**Status:** Backend, Frontend & Integration Complete (Steps 4, 5 & 6)
+**Date:** October 2026
 
 ---
 
@@ -98,10 +98,10 @@ Safe JSON Response
 }
 ```
 
-| Field | Type | Required | Constraints |
-|---|---|---|---|
-| `email` | `string` | Yes | Non-empty, valid format, max 320 characters |
-| `password` | `string` | Yes | Non-empty |
+| Field      | Type     | Required | Constraints                                 |
+| ---------- | -------- | -------- | ------------------------------------------- |
+| `email`    | `string` | Yes      | Non-empty, valid format, max 320 characters |
+| `password` | `string` | Yes      | Non-empty                                   |
 
 ### Successful Response: `HTTP 200 OK`
 
@@ -118,7 +118,7 @@ Safe JSON Response
 Set-Cookie: refreshToken=dGhpcy1pcy1hLXJhbmRvbS1yZWZyZXNoLXRva2Vu...; expires=Thu, 08 Oct 2026 16:00:00 GMT; path=/api/auth; samesite=lax; httponly
 ```
 
-*Note: The response body contains only the short-lived access token and its expiration timestamp. It never contains the raw refresh token, token hash, password, password hash, or internal database metadata.*
+_Note: The response body contains only the short-lived access token and its expiration timestamp. It never contains the raw refresh token, token hash, password, password hash, or internal database metadata._
 
 ### Invalid Credentials Response: `HTTP 401 Unauthorized`
 
@@ -133,7 +133,7 @@ Compliant with RFC 9110 Problem Details:
 }
 ```
 
-*Note: Identical response is returned whether the email does not exist or the password is wrong, preventing user enumeration.*
+_Note: Identical response is returned whether the email does not exist or the password is wrong, preventing user enumeration._
 
 ### Validation Error Response: `HTTP 400 Bad Request`
 
@@ -143,9 +143,7 @@ Compliant with RFC 9110 Problem Details:
   "title": "One or more validation errors occurred.",
   "status": 400,
   "errors": {
-    "Email": [
-      "Email is required."
-    ]
+    "Email": ["Email is required."]
   }
 }
 ```
@@ -155,6 +153,7 @@ Compliant with RFC 9110 Problem Details:
 ## 4. Authentication & Session Architecture
 
 ### JWT Access Token
+
 - **Lifetime:** 15 minutes (configurable via `JwtSettings:AccessTokenExpirationMinutes`).
 - **Algorithm:** HMAC-SHA256 (`HmacSha256`) using symmetric key (minimum 256 bits).
 - **Claims:**
@@ -166,6 +165,7 @@ Compliant with RFC 9110 Problem Details:
 - **Storage:** Handled in frontend memory; never stored in persistent server databases.
 
 ### Opaque Refresh Token
+
 - **Source:** 64 random bytes from `RandomNumberGenerator` (CSPRNG), Base64Url-encoded.
 - **Lifetime:** 7 days (configurable via `JwtSettings:RefreshTokenExpirationDays`).
 - **Delivery:** Delivered strictly via `HttpOnly` cookie. HttpOnly prevents JavaScript from directly reading the refresh-token cookie; XSS itself is not fully prevented by this feature.
@@ -185,7 +185,9 @@ Compliant with RFC 9110 Problem Details:
 - **Replay Protection Foundation:** Revocation/rotation foundation exists; full replay protection will be implemented with the refresh-token endpoint.
 
 ### ASP.NET Core JWT Middleware
+
 Configured via `AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(...)`:
+
 - Validates token signature, issuer, audience, and expiration.
 - Configured with `ClockSkew = TimeSpan.Zero` for strict lifetime enforcement.
 - Integrated into the pipeline via `UseAuthentication()` before `UseAuthorization()`.
@@ -195,6 +197,7 @@ Configured via `AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwt
 ## 5. Frontend Architecture & In-Memory State
 
 ### Component Architecture
+
 - **LoginForm (`src/components/LoginForm.tsx`):**
   - Controlled inputs for `email` and `password`.
   - Accessible master password visibility toggle button ("Show" / "Hide").
@@ -207,12 +210,14 @@ Configured via `AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwt
   - Reuses design system CSS custom properties from `index.css` and layout patterns from `RegisterForm.css`.
 
 ### Client-Side Validation
+
 - Pure TypeScript functions in `src/utils/validation.ts`:
   - `validateEmail(email)`: Ensures presence, max length (320), and format validity.
   - `validateLoginPassword(password)`: Ensures presence without client-enforcing registration complexity policies.
   - `validateLoginForm(data)`: Combines checks into a strongly-typed `LoginFormErrors` object.
 
 ### Login API Client
+
 - `loginUser(request: LoginRequest): Promise<LoginResponse>` in `src/api/auth.ts`:
   - Sends `POST /api/auth/login` with `Content-Type: application/json` and `credentials: 'include'`.
   - `credentials: 'include'` allows the browser to receive and manage the backend's `HttpOnly` refresh token cookie.
@@ -221,6 +226,7 @@ Configured via `AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwt
   - Maps unexpected HTTP 500 / server responses to safe generic text: `Unable to sign in right now. Please try again.`
 
 ### Access Token Storage — In-Memory React State
+
 - Managed via `AuthProvider` and `useAuth` hook in `src/context/`:
   - Access token and expiration timestamp are held **strictly in React component memory (`useState`)**.
   - **Zero Persistent Storage:** The access token is never written to `localStorage`, `sessionStorage`, `IndexedDB`, or JavaScript-accessible cookies.
@@ -230,26 +236,100 @@ Configured via `AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwt
 
 ---
 
-## 6. Security Threats & Defenses
+## 6. Full-Stack Integration Architecture (Step 6)
 
-| Threat | Defense | Verification | Status |
-|---|---|---|---|
-| User enumeration | Generic authentication failure (`"Invalid email or password."`) returned for both nonexistent emails and wrong passwords. | Integration & Frontend test | Verified |
-| Password exposure | Plaintext password is never logged, persisted, returned in responses, or stored in cookies. Processed only in-memory and wiped from component state. | Security test | Verified |
-| JavaScript access to refresh token | Transmitted solely via secure `HttpOnly` cookie with `Path=/api/auth`. HttpOnly prevents JavaScript from directly reading the refresh-token cookie; XSS itself is not fully prevented by this feature. | Security test | Verified |
-| Database exposure of refresh tokens | The raw refresh token is not stored in PostgreSQL; only its SHA-256 hash is stored, so database contents do not directly expose the refresh-token cookie value. | Integration & DB test | Verified |
-| Refresh-token replay | Revocation/rotation foundation exists; full replay protection will be implemented with the refresh-token endpoint. | Unit & entity test | Foundation only / Deferred |
-| Access-token exposure | Short 15-minute token lifetime and in-memory client storage minimize the window of vulnerability. Excluded from persistent server storage. | Security test | Verified |
-| Access-token persistent storage leakage | Access token is held strictly in React memory; never stored in `localStorage`, `sessionStorage`, `IndexedDB`, or URL parameters. | Frontend Security test | Verified |
-| JWT tampering | Cryptographically signed using HMAC-SHA256 with a 256-bit secret key; unauthorized signatures or modified payloads fail verification. | Integration test | Verified |
-| Expired JWT reuse | Strict lifetime verification with zero clock skew (`ClockSkew = TimeSpan.Zero`) rejects expired JWTs. | Integration test | Verified |
-| Error disclosure | Centralized `ExceptionHandlingMiddleware` and frontend API client ensure sanitized ProblemDetails and generic safe messages. | Security test | Verified |
-| CORS abuse | Scoped to explicitly allowed development origins (`http://localhost:5173`, etc.) with `AllowCredentials()`. Wildcards rejected. | Security test | Verified |
-| Rate limiting / brute-force protection | Not currently implemented; planned as security hardening against automated credential stuffing and brute-force attacks | Deferred security hardening | Deferred |
+Step 6 documents the React client and backend ASP.NET Core API contract, along with the separate frontend and backend integration coverage for the data, session, and security pipeline. It does not yet verify a real browser-to-live-frontend-to-live-API-to-live-database flow:
+
+```text
+User Submits LoginForm
+        │
+        ▼
+React LoginForm (Client-side validation via validateLoginForm)
+        │
+        ▼
+API Client (loginUser in src/api/auth.ts)
+  - Method: POST /api/auth/login
+  - Headers: Content-Type: application/json
+  - Credentials: include (allows browser cookie jar management)
+        │
+        ▼
+ASP.NET Core API Pipeline
+  - CORS Policy (FrontendDevPolicy with origin scoping and AllowCredentials)
+  - ExceptionHandlingMiddleware (RFC 9110 ProblemDetails translation)
+  - AuthController.Login receives strongly-typed LoginRequest
+        │
+        ▼
+Application Core
+  - LoginCommandValidator (Pure C# static email format & presence validator)
+  - Email normalization (Trim + Lowercase invariant)
+  - UserRepository.GetByEmailAsync
+  - IPasswordHasher.VerifyPasswordAsync (Constant-time PBKDF2 hash verification)
+  - Generic InvalidCredentialsException ("Invalid email or password.") on mismatch
+        │
+        ▼
+Security Token & Session Services
+  - TokenService.GenerateAccessToken(user) -> 15-minute HMAC-SHA256 JWT
+  - TokenService.GenerateRefreshToken() -> 64-byte CSPRNG opaque token + SHA-256 hash
+  - RefreshToken entity persisted to PostgreSQL via IRefreshTokenRepository and IUnitOfWork
+        │
+        ▼
+HTTP 200 OK Response + Set-Cookie Header
+  - Response Body: { accessToken, expiresAt }
+  - Set-Cookie: refreshToken=<raw>; Path=/api/auth; SameSite=Lax; HttpOnly; Secure (prod/HTTPS)
+        │
+        ▼
+Frontend AuthContext State Update
+  - Access token and expiration stored strictly in React in-memory state (useState)
+  - Zero exposure to localStorage, sessionStorage, IndexedDB, or URL parameters
+  - Client JavaScript cannot read the HttpOnly refresh token cookie
+  - UI re-renders to show authenticated session indicator
+```
+
+### Integration Verification Highlights
+
+1. **Frontend API Contract Coverage:**
+
+- `LoginIntegration.test.tsx` verifies the React login flow and API-client integration against the backend API contract using mocked network behavior.
+- Client request expectations include JSON payloads and `credentials: 'include'`.
+
+2. **Database Integrity:**
+
+- `LoginIntegrationTests.cs` exercises the real ASP.NET Core application and PostgreSQL persistence through the backend API.
+- Raw refresh tokens are never persisted. Only the deterministic 64-character SHA-256 hash is stored in `RefreshTokens`.
+- Foreign key constraint to `Users.Id` is enforced; multiple device sessions can coexist without clobbering existing valid sessions.
+
+3. **In-Memory Token Isolation:**
+   - Access tokens are stored exclusively in React memory (`useState`).
+
+- Frontend integration tests verify that `localStorage`, `sessionStorage`, and URL paths contain zero token or sensitive credential residues.
+
+4. **Resilience & Error Handling:**
+   - Generic 401 ProblemDetails returned for non-existent users, wrong passwords, and casing variations, effectively thwarting user enumeration.
+   - 400 Bad Request returned with RFC 9110 validation errors for missing or malformed inputs.
+   - Network connectivity failures trigger clean client-side alert banners without crashing the application.
 
 ---
 
-## 7. Testing Summary
+## 7. Security Threats & Defenses
+
+| Threat                                  | Defense                                                                                                                                                                                                | Verification                | Status                     |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------- | -------------------------- |
+| User enumeration                        | Generic authentication failure (`"Invalid email or password."`) returned for both nonexistent emails and wrong passwords.                                                                              | Integration & Frontend test | Verified                   |
+| Password exposure                       | Plaintext password is never logged, persisted, returned in responses, or stored in cookies. Processed only in-memory and wiped from component state.                                                   | Security test               | Verified                   |
+| JavaScript access to refresh token      | Transmitted solely via secure `HttpOnly` cookie with `Path=/api/auth`. HttpOnly prevents JavaScript from directly reading the refresh-token cookie; XSS itself is not fully prevented by this feature. | Security & Integration test | Verified                   |
+| Database exposure of refresh tokens     | The raw refresh token is not stored in PostgreSQL; only its SHA-256 hash is stored, so database contents do not directly expose the refresh-token cookie value.                                        | Integration & DB test       | Verified                   |
+| Refresh-token replay                    | Revocation/rotation foundation exists; full replay protection will be implemented with the refresh-token endpoint.                                                                                     | Unit & entity test          | Foundation only / Deferred |
+| Access-token exposure                   | Short 15-minute token lifetime and in-memory client storage minimize the window of vulnerability. Excluded from persistent server storage.                                                             | Security test               | Verified                   |
+| Access-token persistent storage leakage | Access token is held strictly in React memory; never stored in `localStorage`, `sessionStorage`, `IndexedDB`, or URL parameters.                                                                       | Frontend Integration test   | Verified                   |
+| JWT tampering                           | Cryptographically signed using HMAC-SHA256 with a 256-bit secret key; unauthorized signatures or modified payloads fail verification.                                                                  | Integration test            | Verified                   |
+| Expired JWT reuse                       | Strict lifetime verification with zero clock skew (`ClockSkew = TimeSpan.Zero`) rejects expired JWTs.                                                                                                  | Integration test            | Verified                   |
+| Error disclosure                        | Centralized `ExceptionHandlingMiddleware` and frontend API client ensure sanitized ProblemDetails and generic safe messages.                                                                           | Security test               | Verified                   |
+| CORS abuse                              | Scoped to explicitly allowed development origins (`http://localhost:5173`, etc.) with `AllowCredentials()`. Wildcards rejected.                                                                        | Security test               | Verified                   |
+| Rate limiting / brute-force protection  | Not currently implemented; planned as security hardening against automated credential stuffing and brute-force attacks                                                                                 | Deferred security hardening | Deferred                   |
+
+---
+
+## 8. Testing Summary
 
 ### Automated Test Results
 
@@ -259,31 +339,33 @@ Configured via `AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwt
   - `TokenServiceTests`: 4 tests
   - `LoginUserHandlerTests`: 3 tests
   - Existing Registration unit tests: 50 tests
-- **Backend Integration Tests (`PasswordManager.IntegrationTests`):** 56 / 56 passed
+- **Backend Integration Tests (`PasswordManager.IntegrationTests`):** 60 / 60 passed
+  - `LoginIntegrationTests.cs` (backend API/database integration through the real ASP.NET Core application and PostgreSQL persistence): 4 tests
   - `AuthControllerLoginIntegrationTests`: 8 tests
   - `LoginSecurityTests`: 9 tests
   - Existing Registration integration & security tests: 39 tests
-- **Frontend Test Suite (`vitest`):** 64 / 64 passed
-  - `validation.test.ts`: 24 tests (includes 5 new login validation tests)
-  - `authApi.test.ts`: 10 tests (includes 5 new `loginUser` tests)
-  - `LoginForm.test.tsx`: 15 tests (UI rendering, validation, loading state, duplicate submission protection, 401 error handling, in-memory auth state, localStorage/sessionStorage/URL/console isolation)
-  - `RegisterForm.test.tsx`: 15 tests (regression suite with 0 regressions)
-- **Total Backend Tests:** **124 / 124 passed (100%)**
-- **Total Frontend Tests:** **64 / 64 passed (100%)**
+- **Frontend Test Suite (`vitest`):** 68 / 68 passed
+  - `LoginIntegration.test.tsx` (frontend integration/component integration using the backend API contract with mocked network behavior): 4 tests
+  - `LoginForm.test.tsx`: 15 tests
+  - `RegisterForm.test.tsx`: 15 tests
+  - `validation.test.ts`: 24 tests
+  - `authApi.test.ts`: 10 tests
+- **Total Backend Tests:** **128 / 128 passed (100%)**
+- **Total Frontend Tests:** **68 / 68 passed (100%)**
+- **Total Combined Tests:** **196 / 196 passed (100%)**
 - **Linter & Typecheck:** 0 warnings, 0 errors (`oxlint` + `tsc -b`)
 
 ---
 
-## 8. Deferred Work
+## 9. Deferred Work
 
-The following items are outside the scope of Step 5 (Login Frontend) and are deferred to subsequent lifecycle steps or future roadmap phases:
+The following items are outside the scope of Step 6 (Login Integration) and are deferred to subsequent lifecycle steps or future roadmap phases:
 
-1. **Step 6 — Integration:** Live connection between Login UI and API within the Login vertical slice lifecycle.
-2. **Token Refresh Endpoint (`POST /api/auth/refresh`):** Revocation/rotation foundation exists; full replay protection will be implemented with the refresh-token endpoint.
-3. **Logout Endpoint (`POST /api/auth/logout`):** Phase 2, Section 6.3 (Logout).
-4. **Protected Routes:** Phase 2, Section 6.4 (Protected Routes).
-5. **Rate Limiting & Brute-Force Protection:** Deferred security hardening work.
-6. **Multi-Factor Authentication (MFA / TOTP):** Phase 9 (TOTP / 2FA).
-7. **Production HTTPS / HSTS & CSP Header Enforcement:** Deferred to production infrastructure configuration.
-
-
+1. **Step 7 — End-to-End Testing:** Verification of the actual application flow through the real frontend and backend, including browser-level user journeys within the Login vertical slice lifecycle.
+2. **Step 8 — Security Testing:** Dedicated penetration and vulnerability test suite for Login.
+3. **Token Refresh Endpoint (`POST /api/auth/refresh`):** Revocation/rotation foundation exists; full replay protection will be implemented with the refresh-token endpoint.
+4. **Logout Endpoint (`POST /api/auth/logout`):** Phase 2, Section 6.3 (Logout).
+5. **Protected Routes:** Phase 2, Section 6.4 (Protected Routes).
+6. **Rate Limiting & Brute-Force Protection:** Deferred security hardening work.
+7. **Multi-Factor Authentication (MFA / TOTP):** Phase 9 (TOTP / 2FA).
+8. **Production HTTPS / HSTS & CSP Header Enforcement:** Deferred to production infrastructure configuration.

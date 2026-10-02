@@ -396,7 +396,7 @@ Test:
 
 ## 6.2 Login
 
-**Status: Backend & Frontend Complete (Steps 4 & 5 Complete) ✅**
+**Status: Backend, Frontend & Integration Complete (Steps 4, 5 & 6 Complete) ✅**
 
 ### Vertical Slice Lifecycle Summary
 
@@ -405,11 +405,11 @@ Test:
 - **Step 3: Security Analysis** — Complete (Threat modeling: user enumeration, token theft, token replay, XSS/CSRF mitigations)
 - **Step 4: Backend Implementation** — Complete (Auth API, LoginUserHandler, TokenService, RefreshTokens EF Core migration, 124 passing backend tests)
 - **Step 5: Frontend Implementation** — Complete (Login Page, LoginForm, Client Validation, in-memory AuthState/Token storage, 64 passing frontend tests)
-- **Step 6: Integration** — Planned / Next Step
-- **Step 7: End-to-End Testing** — Planned
+- **Step 6: Integration** — Complete (Verified end-to-end integration flow from React UI through API to DB, cookie security, and in-memory auth state)
+- **Step 7: End-to-End Testing** — Planned / Next Step
 - **Step 8: Security Testing** — Planned
 - **Step 9: Documentation** — In Progress (`docs/features/login.md`)
-- **Step 10: Complete** — Pending Frontend and End-to-End steps
+- **Step 10: Complete** — Pending End-to-End and Security testing steps
 
 ### Backend Implementation Summary
 
@@ -425,6 +425,17 @@ Implemented:
 - `RefreshTokens` PostgreSQL database migration
 - Clean Architecture contracts (`ILoginUserHandler`, `ITokenService`, `IRefreshTokenRepository`)
 
+### Integration Summary
+
+Verified:
+
+- End-to-end pipeline: Browser React UI -> HTTP POST -> ASP.NET Core API -> LoginUserHandler -> PostgreSQL DB -> JWT access token + HttpOnly cookie -> in-memory AuthContext -> Authenticated UI
+- Real database persistence: deterministic SHA-256 refresh token hash stored with user relation and valid expiration
+- Cookie security: `HttpOnly`, `Path=/api/auth`, `SameSite=Lax`, inaccessible to client JavaScript
+- Memory isolation: access token held exclusively in React state, zero persistence in `localStorage`, `sessionStorage`, `IndexedDB`, or URLs
+- Error resilience: RFC 9110 ProblemDetails for 401 Unauthorized (user enumeration prevention) and 400 Bad Request (validation errors)
+- Test suite: 128 backend tests (100% passing) + 68 frontend tests (100% passing)
+
 Flow:
 
 ```text
@@ -434,7 +445,7 @@ Login API
    ↓
 Authentication
    ↓
-Session / Token
+Session / Token (DB & Cookie)
    ↓
 Authenticated Frontend
 ```
