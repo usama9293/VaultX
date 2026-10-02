@@ -2,7 +2,7 @@
 
 **Feature:** User Login & Authentication  
 **Vertical Slice:** Phase 2, Section 6.2 (Login)  
-**Status:** Backend, Frontend, Integration & End-to-End Testing Complete (Steps 4, 5, 6 & 7)
+**Status:** Backend, Frontend, Integration, End-to-End & Security Testing Complete (Steps 4, 5, 6, 7 & 8 Complete) ✅  
 **Date:** October 2026
 
 ---
@@ -318,14 +318,14 @@ Frontend AuthContext State Update
 | Password exposure                       | Plaintext password is never logged, persisted, returned in responses, or stored in cookies. Processed only in-memory and wiped from component state.                                                   | Security test               | Verified                   |
 | JavaScript access to refresh token      | Transmitted solely via secure `HttpOnly` cookie with `Path=/api/auth`. HttpOnly prevents JavaScript from directly reading the refresh-token cookie; XSS itself is not fully prevented by this feature. | Security & Integration test | Verified                   |
 | Database exposure of refresh tokens     | The raw refresh token is not stored in PostgreSQL; only its SHA-256 hash is stored, so database contents do not directly expose the refresh-token cookie value.                                        | Integration & DB test       | Verified                   |
-| Refresh-token replay                    | Revocation/rotation foundation exists; full replay protection will be implemented with the refresh-token endpoint.                                                                                     | Unit & entity test          | Foundation only / Deferred |
+| Refresh-token replay                    | The current Login slice stores refresh-token hashes and establishes the persistence foundation, while actual refresh-token rotation/replay handling belongs to the future refresh endpoint/session-security slice. | Domain entity & unit test   | Foundation only / Deferred |
 | Access-token exposure                   | Short 15-minute token lifetime and in-memory client storage minimize the window of vulnerability. Excluded from persistent server storage.                                                             | Security test               | Verified                   |
 | Access-token persistent storage leakage | Access token is held strictly in React memory; never stored in `localStorage`, `sessionStorage`, `IndexedDB`, or URL parameters.                                                                       | Frontend Integration test   | Verified                   |
 | JWT tampering                           | Cryptographically signed using HMAC-SHA256 with a 256-bit secret key; unauthorized signatures or modified payloads fail verification.                                                                  | Integration test            | Verified                   |
 | Expired JWT reuse                       | Strict lifetime verification with zero clock skew (`ClockSkew = TimeSpan.Zero`) rejects expired JWTs.                                                                                                  | Integration test            | Verified                   |
 | Error disclosure                        | Centralized `ExceptionHandlingMiddleware` and frontend API client ensure sanitized ProblemDetails and generic safe messages.                                                                           | Security test               | Verified                   |
 | CORS abuse                              | Scoped to explicitly allowed development origins (`http://localhost:5173`, etc.) with `AllowCredentials()`. Wildcards rejected.                                                                        | Security test               | Verified                   |
-| Rate limiting / brute-force protection  | Not currently implemented; planned as security hardening against automated credential stuffing and brute-force attacks                                                                                 | Deferred security hardening | Deferred                   |
+| Rate limiting / brute-force protection  | Not currently implemented; deferred security hardening.                                                                                                                                                | Deferred security hardening | Deferred                   |
 
 ---
 
@@ -333,27 +333,28 @@ Frontend AuthContext State Update
 
 ### Automated Test Results
 
-- **Backend Unit Tests (`PasswordManager.UnitTests`):** 68 / 68 passed
+- **Backend Unit Tests (`PasswordManager.UnitTests`):** 69 / 69 passed
   - `LoginCommandValidatorTests`: 5 tests
   - `RefreshTokenTests`: 6 tests
-  - `TokenServiceTests`: 4 tests
+  - `TokenServiceTests`: 5 tests (+1 security claims audit test)
   - `LoginUserHandlerTests`: 3 tests
   - Existing Registration unit tests: 50 tests
-- **Backend Integration Tests (`PasswordManager.IntegrationTests`):** 60 / 60 passed
+- **Backend Integration Tests (`PasswordManager.IntegrationTests`):** 82 / 82 passed
   - `LoginIntegrationTests.cs` (backend API/database integration through the real ASP.NET Core application and PostgreSQL persistence): 4 tests
   - `AuthControllerLoginIntegrationTests`: 8 tests
-  - `LoginSecurityTests`: 9 tests
+  - `LoginSecurityTests`: 31 tests (+22 Step 8 security tests across boundary, tamper, injection, and enumeration scenarios)
   - Existing Registration integration & security tests: 39 tests
-- **Frontend Test Suite (`vitest`):** 68 / 68 passed
+- **Frontend Test Suite (`vitest`):** 70 / 70 passed
   - `LoginIntegration.test.tsx` (frontend integration/component integration using the backend API contract with mocked network behavior): 4 tests
-  - `LoginForm.test.tsx`: 15 tests
+  - `LoginForm.test.tsx`: 17 tests (+2 Step 8 advanced security & XSS boundary tests)
   - `RegisterForm.test.tsx`: 15 tests
   - `validation.test.ts`: 24 tests
   - `authApi.test.ts`: 10 tests
-- **Total Backend Tests:** **128 / 128 passed (100%)**
-- **Total Frontend Tests:** **68 / 68 passed (100%)**
-- **Total Combined Tests:** **196 / 196 passed (100%)**
+- **Total Backend Tests:** **151 / 151 passed (100%)**
+- **Total Frontend Tests:** **70 / 70 passed (100%)**
 - **Playwright Browser E2E Tests:** **7 / 7 passed (100%)**
+- **Overall Suite Metric:** **228 total automated tests across frontend, backend, and browser E2E**
+- **Security-Specific Verification:** **34 security-specific tests** (all passed)
 - **Linter & Typecheck:** 0 warnings, 0 errors (`oxlint` + `tsc -b`)
 
 ---
@@ -420,14 +421,126 @@ Each successful-login test creates a unique `e2e-<uuid>@vaultx.local` user throu
 
 ---
 
-## 10. Deferred Work
+## 10. Login Security Testing (Step 8)
 
-The following items are outside the scope of Step 7 (Login End-to-End Testing) and are deferred to subsequent lifecycle steps or future roadmap phases:
+**Status:** Complete
 
-1. **Step 8 — Security Testing:** Dedicated penetration and vulnerability test suite for Login.
-2. **Token Refresh Endpoint (`POST /api/auth/refresh`):** Revocation/rotation foundation exists; full replay protection will be implemented with the refresh-token endpoint.
-3. **Logout Endpoint (`POST /api/auth/logout`):** Phase 2, Section 6.3 (Logout).
-4. **Protected Routes:** Phase 2, Section 6.4 (Protected Routes).
-5. **Rate Limiting & Brute-Force Protection:** Deferred security hardening work.
-6. **Multi-Factor Authentication (MFA / TOTP):** Phase 9 (TOTP / 2FA).
-7. **Production HTTPS / HSTS & CSP Header Enforcement:** Deferred to production infrastructure configuration.
+Step 8 executes an adversarial security assessment of the completed Login vertical slice. It evaluates the attack surface across authentication boundaries, credential handling, token mechanics, input validation, injection resistance, and browser data isolation.
+
+### Security-Test Scope
+
+The security assessment rigorously exercises the actual implementation across the following areas:
+1. **Authentication Bypass & Payload Integrity:** Missing parameters, empty JSON payloads, and mass-assignment / unexpected property injections.
+2. **Credential Attacks:** Wrong passwords, nonexistent emails, boundary-length inputs, oversized emails, 10,000-character passwords, and Unicode/special-character credentials.
+3. **User Enumeration Invariance:** Structural and informational equivalence between existing and nonexistent user authentication failures.
+4. **Password Handling & Data Exposure:** Zero plaintext password or hash disclosure across API responses, error payloads, browser storage, URLs, or console output.
+5. **JWT & Access-Token Security:** Claims minimalism, token structure, expiration enforcement, and rejection of forged signatures, expired tokens, tampered payloads, "none" algorithm tokens, and malformed Bearer headers.
+6. **Refresh-Token Security:** CSPRNG entropy, SHA-256 hash persistence, HttpOnly/Path=/api/auth/SameSite=Lax cookie boundaries, and cookie omission on failed attempts.
+7. **Injection Resistance:** Safe handling and rejection of SQL/ORM injection vectors in email and password fields without database corruption, information leakage, or 500 errors.
+8. **Error Disclosure & Stack Traces:** Sanitized RFC 9110 ProblemDetails and zero disclosure of server paths, database drivers, or exception call stacks.
+9. **HTTP / API Protocol Boundaries:** Unsupported HTTP verbs (GET, PUT, PATCH, DELETE) and unsupported media types (`application/x-www-form-urlencoded`).
+10. **CORS & Browser Boundaries:** Origin whitelisting and rejection of arbitrary untrusted origins.
+11. **XSS & DOM Isolation:** Safe rendering of malicious script tags and HTML in form fields as plain text.
+
+---
+
+### Security Test Matrix
+
+| # | Threat | Attack Scenario | Relevant Component | Expected Secure Behavior | Existing Test Coverage | Additional Test Required? | Test Layer | Result |
+|---|---|---|---|---|---|---|---|---|
+| 1 | Auth bypass via missing credentials | Submit JSON with missing `password` or `email` property | `POST /api/auth/login` | HTTP 400 Bad Request with RFC 9110 validation errors; no token or cookie issued | Partial (empty string tested) | Yes (`Login_MissingEmailOrPasswordProperty_Returns400BadRequest`) | Integration / API | Passed |
+| 2 | Auth bypass via mass assignment | Submit extra JSON fields (`isAdmin`, `roles`, `id`, `__proto__`) | `POST /api/auth/login` | Extra fields ignored; authentication succeeds strictly on credentials; no escalated roles in JWT | None for login | Yes (`Login_MassAssignment_UnexpectedJsonFields_IgnoredAndServerControlled`) | Integration / API | Passed |
+| 3 | User enumeration | Compare responses for existing email + wrong password vs nonexistent email | `POST /api/auth/login` | Identical HTTP 401, identical Content-Type, identical ProblemDetails title & detail (`"Invalid email or password."`), no Set-Cookie | Separate tests existed | Yes (`Login_UserEnumeration_ExistingVsNonexistentUser_IndistinguishableResponses`) | Integration / API | Passed |
+| 4 | Buffer overrun / DoS via oversized email | Send email > 320 characters (`324` chars) | `POST /api/auth/login` | HTTP 400 Bad Request (`"Email must not exceed 320 characters."`) | Unit test existed | Yes (`Login_BoundaryLength_OversizedEmail_Returns400BadRequest`) | Integration / API | Passed |
+| 5 | DoS / Crash via huge password | Submit 10,000-character password string | `POST /api/auth/login`, `PasswordHasher` | Handled safely by PBKDF2; returns HTTP 401 without 500 error, crash, or stack trace | None | Yes (`Login_BoundaryLength_VeryLongPassword_HandlesSafelyWithout500OrCrash`) | Integration / API | Passed |
+| 6 | Character set corruption | Register and log in with multibyte Unicode & emojis (`🔒P@$$w0rd_With_Üñîçødé_&_Emojis!🔑`) | `POST /api/auth/login` | Full UTF-8 fidelity; authentication succeeds with HTTP 200 and access token | None explicit | Yes (`Login_UnicodeAndSpecialCharacters_AuthenticatesSuccessfully`) | Integration / API | Passed |
+| 7 | SQL Injection in Email | Submit `' OR '1'='1`, `' UNION SELECT...`, `test@vaultx.local'; DROP TABLE "Users";--` | `POST /api/auth/login`, `UserRepository` | Rejected by validator (400) or fails safely (401); no SQL syntax error, no 500, no data dropped | None | Yes (`Login_SqlInjectionInEmail_SafelyRejectedWithout500OrDbLeak`) | Integration / API | Passed |
+| 8 | SQL Injection in Password | Submit SQL injection string in password against registered user | `POST /api/auth/login`, `LoginUserHandler` | Treated as literal string; constant-time PBKDF2 comparison fails with 401; database unmodified | None | Yes (`Login_SqlInjectionInPassword_SafelyHandledWithoutDatabaseExecution`) | Integration / API | Passed |
+| 9 | JWT Sensitive Data Exposure | Audit issued access token claims for sensitive fields | `TokenService`, `POST /api/auth/login` | Contains only intended claims (`sub`, `email`, `jti`, `iat`, `exp`); no password, hash, or refresh token | Partial | Yes (`Login_AccessToken_ContainsOnlyIntendedClaims_NoSensitiveData`, `GenerateAccessToken_DoesNotIncludeSensitiveClaims`) | Unit & Integration | Passed |
+| 10 | JWT "None" Algorithm Attack | Submit token crafted with `"alg": "none"` to protected endpoint | `JwtBearer` middleware | HTTP 401 Unauthorized; token rejected | None | Yes (`JwtMiddleware_NoneAlgorithm_Returns401Unauthorized`) | Integration / API | Passed |
+| 11 | JWT Tampered Payload | Modify payload claim (`sub`) while retaining original signature | `JwtBearer` middleware | Signature verification failure; HTTP 401 Unauthorized | None | Yes (`JwtMiddleware_TamperedPayload_Returns401Unauthorized`) | Integration / API | Passed |
+| 12 | Malformed Bearer Token | Send `Bearer not-a-jwt` or garbage token string | `JwtBearer` middleware | HTTP 401 Unauthorized; no unhandled exception | None | Yes (`JwtMiddleware_MalformedBearerToken_Returns401Unauthorized`) | Integration / API | Passed |
+| 13 | Sensitive Data Exposure in Responses | Inspect success (200) and failure (400, 401) responses | `AuthController`, `ExceptionHandlingMiddleware` | Plaintext passwords, password hashes (`$pbkdf2`), and token hashes never appear in bodies | Partial (200 tested) | Yes (`Login_Response_NeverExposesPasswordOrHashesInFailureOrSuccess`) | Integration / API | Passed |
+| 14 | Unsupported Content-Type | Send `application/x-www-form-urlencoded` body | `POST /api/auth/login` | HTTP 415 Unsupported Media Type | None | Yes (`Login_UnsupportedContentType_Returns415UnsupportedMediaType`) | Integration / API | Passed |
+| 15 | Cross-Site Scripting (XSS) in Login Form | Type `<img src="x" />` into email/password fields | `LoginForm.tsx` | Handled as plain text; validator catches format; no executable DOM nodes created | None | Yes (`LoginForm.test.tsx` XSS tests) | Frontend Unit | Passed |
+| 16 | Safe Error Rendering | Trigger unexpected 500 error from API | `LoginForm.tsx` | Displays sanitized generic error (`"Unable to sign in right now."`); no HTML injection | None | Yes (`LoginForm.test.tsx` safe error test) | Frontend Unit | Passed |
+| 17 | Forged JWT Signature | Present token signed with untrusted attacker key | `JwtBearer` middleware | HTTP 401 Unauthorized | `LoginSecurityTests` | No | Integration / API | Passed |
+| 18 | Expired JWT Reuse | Present token past expiration timestamp | `JwtBearer` middleware | HTTP 401 Unauthorized (`ClockSkew = TimeSpan.Zero`) | `LoginSecurityTests` | No | Integration / API | Passed |
+| 19 | Refresh Cookie Boundary | Inspect Set-Cookie header on successful login | `AuthController` | `HttpOnly`, `Path=/api/auth`, `SameSite=Lax`, `Expires` set | `LoginSecurityTests`, E2E | No | Integration & E2E | Passed |
+| 20 | Cookie Omission on Auth Failure | Inspect headers when login fails | `AuthController` | No `Set-Cookie` header present | `AuthControllerLoginIntegrationTests` | No | Integration | Passed |
+| 21 | CORS Development Policy | Request with `Origin: http://localhost:5173` | ASP.NET Core CORS | Allowed with `Access-Control-Allow-Credentials: true` | `LoginSecurityTests` | No | Integration | Passed |
+| 22 | CORS Untrusted Origin | Request with `Origin: http://untrusted-attacker.com` | ASP.NET Core CORS | Origin not allowed; wildcard rejected | `LoginSecurityTests` | No | Integration | Passed |
+| 23 | Unsupported HTTP Methods | Send GET, PUT, PATCH, DELETE to `/api/auth/login` | ASP.NET Core Routing | HTTP 405 Method Not Allowed | `LoginSecurityTests` | No | Integration | Passed |
+| 24 | Error Disclosure (Malformed JSON) | Send malformed JSON (`{ not valid json }`) | `ExceptionHandlingMiddleware` | HTTP 400 Bad Request; zero stack traces, server paths, or driver names | `LoginSecurityTests` | No | Integration | Passed |
+| 25 | Storage Boundary Isolation | Check browser storage after successful login | React `AuthContext` | Access token held only in React memory; 0 occurrences in `localStorage`, `sessionStorage`, cookies, URLs | `LoginForm.test.tsx`, E2E | No | Frontend & E2E | Passed |
+
+---
+
+### Implemented vs. Verified vs. Deferred Breakdown
+
+To maintain strict architectural transparency and documentation precision, the security properties related to VaultX Login are categorized as follows:
+
+#### Tested and Verified Security Controls
+- **Email Normalization & Validation:** Static C# validator enforces length ($\le 320$) and RFC email syntax; lowercased and trimmed before database query.
+- **Constant-Time Password Verification:** PBKDF2-SHA256 (100,000 iterations, 128-bit salt, 256-bit subkey) with `CryptographicOperations.FixedTimeEquals` to prevent timing attacks.
+- **User Enumeration Invariance:** Confirmed that existing-user and nonexistent-user login failures yield bitwise-indistinguishable RFC 9110 ProblemDetails payloads (`"Invalid email or password."`), identical 401 status codes, and omission of Set-Cookie headers.
+- **Refresh-Token Persistence Foundation:** Raw 64-byte CSPRNG refresh token is never stored in PostgreSQL; only its deterministic SHA-256 hex hash is persisted. The current Login slice stores refresh-token hashes and establishes the persistence foundation, while actual refresh-token rotation/replay handling belongs to the future refresh endpoint/session-security slice.
+- **Cookie Security Defense:** `HttpOnly`, `Path=/api/auth`, `SameSite=Lax` restrict cookie exposure and prevent JavaScript access.
+- **In-Memory Access Token Storage:** Confirmed across both Vitest and Playwright real-browser tests that access tokens are held strictly in React memory; 0 occurrences in `localStorage`, `sessionStorage`, `document.cookie`, or browser URLs.
+- **JWT Cryptographic Integrity:** Strict verification rejects tampered payloads, "none" algorithm tokens, expired tokens, forged signatures, and malformed Bearer headers.
+- **SQL / ORM Injection Defense:** SQL injection payloads were safely handled without authentication bypass, SQL errors, or database corruption.
+- **Mass Assignment Defense:** Extra submitted JSON properties (`isAdmin`, `roles`, `__proto__`, etc.) are ignored and do not pollute domain entities or escalate token claims.
+- **Centralized Exception Sanitization:** `ExceptionHandlingMiddleware` catches unhandled exceptions and returns generic RFC 9110 ProblemDetails without stack traces, driver names, or internal server paths.
+- **CORS Origin Whitelisting:** Development policy explicitly binds to configured frontend hosts with credentials allowed; rejects arbitrary untrusted origins.
+- **XSS & DOM Isolation:** Malicious script tags and HTML in form fields are handled safely as plain text without script execution.
+
+#### Functionality Not Yet Implemented
+- **Token Refresh Endpoint (`POST /api/auth/refresh`):** Replay detection and token rotation foundation is established in domain entities; actual endpoint implementation belongs to the future refresh slice.
+- **Logout Endpoint (`POST /api/auth/logout`):** Session invalidation and cookie revocation endpoint; belongs to Phase 2, Section 6.3.
+- **Protected Routes & Resource Authorization:** Application route authorization; belongs to Phase 2, Section 6.4. Token validation is tested via integration test controller.
+- **Multi-Factor Authentication (MFA / TOTP):** Second-factor challenge flow; belongs to Phase 9.
+
+#### Deferred Security Hardening
+- **Rate Limiting & Brute-Force Protection:** Not currently implemented; deferred security hardening. (Not an implementation defect or vulnerability discovered in Step 8, but a planned infrastructure hardening control).
+- **Production HTTPS / HSTS & CSP Header Enforcement:** Deferred to production infrastructure configuration and hosting environment.
+
+#### Vulnerabilities Actually Discovered
+- **Findings:** No vulnerabilities were identified within the tested Login attack surface.
+- **Scope Limit:** All evaluated scenarios confirmed that tested security controls operate as specified. This conclusion is strictly limited to the tested attack scenarios and does not imply that unexamined attack surfaces or future features are proven vulnerability-free.
+- **Vulnerabilities Fixed:** None required.
+- **Regression Impact:** None; all 228 total automated tests across frontend, backend, and browser E2E continue to pass.
+
+---
+
+### Security Findings & Resolution
+
+1. **Vulnerabilities Discovered:** No vulnerabilities were identified within the tested Login attack surface. The evaluated scenarios confirmed that all tested security controls operate as specified. This conclusion is strictly limited to the tested attack scenarios and does not imply that unexamined attack surfaces or future features are proven vulnerability-free.
+2. **Vulnerabilities Fixed:** None (no production code defects or security vulnerabilities were identified within the tested scenarios).
+3. **Regression Impact:** None (all existing tests continue to pass with 100% success).
+
+---
+
+### Final Security Test Suite Results
+
+- **Backend Unit Tests:** 69 / 69 passed (100%)
+- **Backend Integration & Security Tests:** 82 / 82 passed (100%)
+- **Total Backend Tests:** **151 / 151 passed (100%)**
+- **Frontend Unit & Security Tests:** **70 / 70 passed (100%)**
+- **Playwright Browser E2E Tests:** **7 / 7 passed (100%)**
+- **Overall Suite Metric:** **228 total automated tests across frontend, backend, and browser E2E**
+- **Security-Specific Verification:** **34 security-specific tests** (all passed)
+- **Linter & Typecheck:** 0 warnings, 0 errors
+
+---
+
+## 11. Deferred Work
+
+The following items are outside the scope of Login (Steps 1 through 8) and are deferred to subsequent lifecycle steps or future roadmap phases:
+
+1. **Token Refresh Endpoint (`POST /api/auth/refresh`):** The current Login slice stores refresh-token hashes and establishes the persistence foundation, while actual refresh-token rotation/replay handling belongs to the future refresh endpoint/session-security slice.
+2. **Logout Endpoint (`POST /api/auth/logout`):** Phase 2, Section 6.3 (Logout).
+3. **Protected Routes:** Phase 2, Section 6.4 (Protected Routes).
+4. **Rate Limiting & Brute-Force Protection:** Not currently implemented; deferred security hardening.
+5. **Multi-Factor Authentication (MFA / TOTP):** Phase 9 (TOTP / 2FA).
+6. **Production HTTPS / HSTS & CSP Header Enforcement:** Deferred to production infrastructure configuration.
+

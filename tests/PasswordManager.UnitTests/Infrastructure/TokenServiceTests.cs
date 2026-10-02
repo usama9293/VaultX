@@ -109,4 +109,23 @@ public class TokenServiceTests
 
         Assert.Throws<InvalidOperationException>(() => new TokenService(Options.Create(shortKeySettings)));
     }
+
+    [Fact]
+    public void GenerateAccessToken_DoesNotIncludeSensitiveClaims()
+    {
+        var passwordHash = Encoding.UTF8.GetBytes("$pbkdf2-sha256$i=100000$s=saltsalt$h=hashhash");
+        var user = new User("claims.security@vaultx.local", passwordHash);
+
+        var (tokenString, _) = _tokenService.GenerateAccessToken(user);
+
+        var handler = new JwtSecurityTokenHandler();
+        var jwt = handler.ReadJwtToken(tokenString);
+
+        var prohibitedClaims = new[] { "password", "passwordHash", "tokenHash", "refreshToken", "rawRefreshToken", "role", "isAdmin" };
+        foreach (var claim in jwt.Claims)
+        {
+            Assert.DoesNotContain(claim.Type, prohibitedClaims);
+            Assert.DoesNotContain("$pbkdf2", claim.Value);
+        }
+    }
 }
