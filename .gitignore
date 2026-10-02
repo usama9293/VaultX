@@ -48,6 +48,8 @@ logs/
 coverage/
 artifacts/
 publish/
+**/playwright-report/
+**/test-results/
 
 # Frontend dependencies and generated output
 node_modules/

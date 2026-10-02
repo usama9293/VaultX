@@ -2,7 +2,7 @@
 
 **Feature:** User Login & Authentication  
 **Vertical Slice:** Phase 2, Section 6.2 (Login)  
-**Status:** Backend, Frontend & Integration Complete (Steps 4, 5 & 6)
+**Status:** Backend, Frontend, Integration & End-to-End Testing Complete (Steps 4, 5, 6 & 7)
 **Date:** October 2026
 
 ---
@@ -353,19 +353,81 @@ Frontend AuthContext State Update
 - **Total Backend Tests:** **128 / 128 passed (100%)**
 - **Total Frontend Tests:** **68 / 68 passed (100%)**
 - **Total Combined Tests:** **196 / 196 passed (100%)**
+- **Playwright Browser E2E Tests:** **7 / 7 passed (100%)**
 - **Linter & Typecheck:** 0 warnings, 0 errors (`oxlint` + `tsc -b`)
 
 ---
 
-## 9. Deferred Work
+## 9. End-to-End Testing (Step 7)
 
-The following items are outside the scope of Step 6 (Login Integration) and are deferred to subsequent lifecycle steps or future roadmap phases:
+**Status:** Complete
 
-1. **Step 7 — End-to-End Testing:** Verification of the actual application flow through the real frontend and backend, including browser-level user journeys within the Login vertical slice lifecycle.
-2. **Step 8 — Security Testing:** Dedicated penetration and vulnerability test suite for Login.
-3. **Token Refresh Endpoint (`POST /api/auth/refresh`):** Revocation/rotation foundation exists; full replay protection will be implemented with the refresh-token endpoint.
-4. **Logout Endpoint (`POST /api/auth/logout`):** Phase 2, Section 6.3 (Logout).
-5. **Protected Routes:** Phase 2, Section 6.4 (Protected Routes).
-6. **Rate Limiting & Brute-Force Protection:** Deferred security hardening work.
-7. **Multi-Factor Authentication (MFA / TOTP):** Phase 9 (TOTP / 2FA).
-8. **Production HTTPS / HSTS & CSP Header Enforcement:** Deferred to production infrastructure configuration.
+Step 7 verifies the actual login application flow in a real Chromium browser using the local runtime topology:
+
+```text
+Chromium browser
+  ↓
+Vite frontend: http://localhost:5173
+  ↓ /api proxy
+ASP.NET Core API: http://localhost:5071
+  ↓
+PostgreSQL: localhost:5432 / VaultXDb
+  ↓
+React AuthContext and authenticated UI
+```
+
+### E2E Architecture
+
+- Framework: Playwright (`@playwright/test`), using the installed Chrome channel as Chromium.
+- Configuration: `frontend/playwright.config.ts`.
+- Tests: `e2e/auth/login.spec.ts`.
+- Test-user helper: `e2e/fixtures/test-user.ts`.
+- Frontend command: `npm run dev -- --host localhost --port 5173`.
+- Backend command: `dotnet run --project src/PasswordManager.API/PasswordManager.API.csproj --launch-profile http`.
+- PostgreSQL migrations were applied with `dotnet ef database update` before the verified run; the API does not apply migrations automatically.
+
+### E2E Scenarios
+
+The suite contains seven passing browser tests:
+
+1. Valid login observes the real `POST /api/auth/login` response, verifies HTTP 200 and response structure, and displays the authenticated UI.
+2. Refresh-cookie security verifies `HttpOnly`, `Path=/api/auth`, `SameSite=Lax`, expiration, and Development HTTP `Secure=false` without logging the cookie value.
+3. Access-token storage verifies the token is absent from `localStorage`, `sessionStorage`, URL query/hash, and JavaScript-visible cookies while the authenticated UI is present.
+4. Invalid password receives the real HTTP 401 response and displays the generic authentication error.
+5. Unknown email receives the same generic HTTP 401 response.
+6. Empty and malformed input are rejected by the real browser UI validation.
+7. An intentionally aborted login request displays the safe network-failure message.
+
+Each successful-login test creates a unique `e2e-<uuid>@vaultx.local` user through the real registration endpoint. The generated users are intentionally namespaced because the current application has no test-only deletion endpoint or database reset utility.
+
+### E2E Security Boundaries
+
+- Access-token and refresh-token values are never logged, snapshotted, or included in failure messages.
+- Cookie assertions inspect metadata only; the raw cookie value is not reported.
+- Test credentials remain in process memory and are not stored in environment files.
+- The access token remains in React memory; Step 7 does not inspect React internals.
+
+### E2E Limitations
+
+- Refresh, logout, protected routes, vault workflows, MFA, and other later lifecycle work remain out of scope.
+- Existing backend integration tests use SQLite; Step 7 uses the real local PostgreSQL database.
+- E2E-created users remain in the local database unless the database is reset separately.
+- The repository does not provide Docker orchestration for PostgreSQL.
+
+### E2E Results
+
+- `npm run test:e2e`: **7 / 7 passed (100%)** against the live frontend, API, and PostgreSQL.
+
+---
+
+## 10. Deferred Work
+
+The following items are outside the scope of Step 7 (Login End-to-End Testing) and are deferred to subsequent lifecycle steps or future roadmap phases:
+
+1. **Step 8 — Security Testing:** Dedicated penetration and vulnerability test suite for Login.
+2. **Token Refresh Endpoint (`POST /api/auth/refresh`):** Revocation/rotation foundation exists; full replay protection will be implemented with the refresh-token endpoint.
+3. **Logout Endpoint (`POST /api/auth/logout`):** Phase 2, Section 6.3 (Logout).
+4. **Protected Routes:** Phase 2, Section 6.4 (Protected Routes).
+5. **Rate Limiting & Brute-Force Protection:** Deferred security hardening work.
+6. **Multi-Factor Authentication (MFA / TOTP):** Phase 9 (TOTP / 2FA).
+7. **Production HTTPS / HSTS & CSP Header Enforcement:** Deferred to production infrastructure configuration.

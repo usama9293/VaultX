@@ -396,20 +396,20 @@ Test:
 
 ## 6.2 Login
 
-**Status: Backend, Frontend & Integration Complete (Steps 4, 5 & 6 Complete) ✅**
+**Status: Backend, Frontend, Integration & End-to-End Testing Complete (Steps 4, 5, 6 & 7 Complete) ✅**
 
 ### Vertical Slice Lifecycle Summary
 
 - **Step 1: Requirement** — Complete (Defined user login needs, single-session & multi-device requirements, acceptance criteria)
 - **Step 2: Design** — Complete (Architectural contract, JWT short-lived access token, opaque refresh token with HttpOnly cookie)
 - **Step 3: Security Analysis** — Complete (Threat modeling: user enumeration, token theft, token replay, XSS/CSRF mitigations)
-- **Step 4: Backend Implementation** — Complete (Auth API, LoginUserHandler, TokenService, RefreshTokens EF Core migration, 124 passing backend tests)
-- **Step 5: Frontend Implementation** — Complete (Login Page, LoginForm, Client Validation, in-memory AuthState/Token storage, 64 passing frontend tests)
+- **Step 4: Backend Implementation** — Complete (Auth API, LoginUserHandler, TokenService, RefreshTokens EF Core migration, 128 passing backend tests)
+- **Step 5: Frontend Implementation** — Complete (Login Page, LoginForm, Client Validation, in-memory AuthState/Token storage, 68 passing frontend tests)
 - **Step 6: Integration** — Complete (Verified end-to-end integration flow from React UI through API to DB, cookie security, and in-memory auth state)
-- **Step 7: End-to-End Testing** — Planned / Next Step
-- **Step 8: Security Testing** — Planned
+- **Step 7: End-to-End Testing** — Complete (7/7 Playwright browser tests passed against live Vite frontend, ASP.NET Core API, and real PostgreSQL database)
+- **Step 8: Security Testing** — Planned / Next Step
 - **Step 9: Documentation** — In Progress (`docs/features/login.md`)
-- **Step 10: Complete** — Pending End-to-End and Security testing steps
+- **Step 10: Complete** — Pending Security testing steps
 
 ### Backend Implementation Summary
 
@@ -435,6 +435,19 @@ Verified:
 - Memory isolation: access token held exclusively in React state, zero persistence in `localStorage`, `sessionStorage`, `IndexedDB`, or URLs
 - Error resilience: RFC 9110 ProblemDetails for 401 Unauthorized (user enumeration prevention) and 400 Bad Request (validation errors)
 - Test suite: 128 backend tests (100% passing) + 68 frontend tests (100% passing)
+
+### End-to-End Testing Summary
+
+Verified in Real Browser:
+
+- Real Chromium browser user journey from login form submission to authenticated state card
+- Real HTTP 200 contract with structural validation of `accessToken` and `expiresAt`
+- Refresh cookie security attributes (`HttpOnly`, `Path=/api/auth`, `SameSite=Lax`, expiration, `Secure=false` in local HTTP)
+- Total absence of access token and refresh token from `localStorage`, `sessionStorage`, URLs, and `document.cookie`
+- 401 Unauthorized handling for invalid passwords and unknown emails displaying identical generic error
+- Real UI validation rejecting empty and malformed credentials
+- Network failure graceful error presentation (`Unable to connect to the server. Please check your connection and try again.`)
+- Test suite: 7 / 7 Playwright browser E2E tests (100% passing) against live frontend, API, and PostgreSQL
 
 Flow:
 
