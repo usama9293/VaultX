@@ -32,11 +32,33 @@ public class ExceptionHandlingMiddleware
             _logger.LogWarning("Duplicate email conflict: {Message}", ex.Message);
             await HandleDuplicateEmailExceptionAsync(context, ex);
         }
+        catch (InvalidCredentialsException ex)
+        {
+            _logger.LogWarning("Authentication failure: {Message}", ex.Message);
+            await HandleInvalidCredentialsExceptionAsync(context, ex);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "An unhandled error occurred during request execution.");
             await HandleGenericExceptionAsync(context);
         }
+    }
+
+    private static async Task HandleInvalidCredentialsExceptionAsync(HttpContext context, InvalidCredentialsException ex)
+    {
+        context.Response.ContentType = MediaTypeNames.Application.Json;
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+
+        var problemDetails = new ProblemDetails
+        {
+            Status = StatusCodes.Status401Unauthorized,
+            Title = "Unauthorized",
+            Detail = ex.Message,
+            Type = "https://tools.ietf.org/html/rfc9110#section-15.5.2"
+        };
+
+        var json = JsonSerializer.Serialize(problemDetails);
+        await context.Response.WriteAsync(json);
     }
 
     private static async Task HandleValidationExceptionAsync(HttpContext context, ValidationException ex)

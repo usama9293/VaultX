@@ -22,6 +22,42 @@ namespace PasswordManager.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("PasswordManager.Domain.Entities.RefreshToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReplacedByTokenId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("RefreshTokens", (string)null);
+                });
+
             modelBuilder.Entity("PasswordManager.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -139,6 +175,17 @@ namespace PasswordManager.Infrastructure.Migrations
                     b.ToTable("VaultEntries", (string)null);
                 });
 
+            modelBuilder.Entity("PasswordManager.Domain.Entities.RefreshToken", b =>
+                {
+                    b.HasOne("PasswordManager.Domain.Entities.User", "User")
+                        .WithMany("RefreshTokens")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("PasswordManager.Domain.Entities.Vault", b =>
                 {
                     b.HasOne("PasswordManager.Domain.Entities.User", "User")
@@ -163,6 +210,8 @@ namespace PasswordManager.Infrastructure.Migrations
 
             modelBuilder.Entity("PasswordManager.Domain.Entities.User", b =>
                 {
+                    b.Navigation("RefreshTokens");
+
                     b.Navigation("Vault");
                 });
 

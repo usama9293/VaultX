@@ -39,3 +39,33 @@ export interface ApiErrorResponse {
   detail?: string
   errors?: Record<string, string[]>
 }
+
+export interface LoginFormData {
+  email: string
+  password: string
+}
+
+export interface LoginFormErrors {
+  email?: string
+  password?: string
+  general?: string
+}
+
+export interface LoginRequest {
+  email: string
+  password: string
+}
+
+export interface LoginResponse {
+  accessToken: string
+  expiresAt: string
+}
+
+export type AuthStatus = 'initializing' | 'unauthenticated' | 'authenticated'
+
+export interface AuthState {
+  status: AuthStatus
+  accessToken: string | null
+  expiresAt: string | null
+}
+
