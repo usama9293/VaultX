@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, loginUser, registerUser } from '../api/auth'
+import { ApiError, loginUser, logoutUser, registerUser } from '../api/auth'
 import type { LoginRequest, RegisterUserRequest } from '../types/auth'
 
 describe('auth API client - registerUser', () => {
@@ -201,6 +201,84 @@ describe('auth API client - loginUser', () => {
     vi.mocked(fetch).mockRejectedValueOnce(new Error('Failed to fetch'))
 
     const promise = loginUser(mockLoginRequest)
+    await expect(promise).rejects.toThrow('Unable to connect to the server.')
+    await expect(promise).rejects.toBeInstanceOf(ApiError)
+  })
+})
+
+describe('auth API client - logoutUser', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('sends POST /api/auth/logout with credentials: include and no request body', async () => {
+    const fetchMock = vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 204,
+      json: async () => {
+        throw new Error('204 responses have no body')
+      },
+    } as unknown as Response)
+
+    await logoutUser()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toContain('/api/auth/logout')
+    expect(init?.method).toBe('POST')
+    expect(init?.credentials).toBe('include')
+    expect(init?.body).toBeUndefined()
+  })
+
+  it('does not send refresh token, user ID, or session ID in body or URL', async () => {
+    const fetchMock = vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 204,
+    } as Response)
+
+    await logoutUser()
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(String(url)).not.toMatch(/refreshToken|userId|sessionId|tokenHash/i)
+    expect(init?.body).toBeUndefined()
+    expect(init?.headers).toBeUndefined()
+  })
+
+  it('handles HTTP 204 No Content successfully without parsing a body', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 204,
+      json: async () => {
+        throw new Error('should not parse body on 204')
+      },
+    } as unknown as Response)
+
+    await expect(logoutUser()).resolves.toBeUndefined()
+  })
+
+  it('throws ApiError with safe generic message on unexpected HTTP 500 error', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      json: async () => ({
+        type: 'https://tools.ietf.org/html/rfc9110#section-15.6.1',
+        title: 'Internal Server Error',
+        status: 500,
+        detail: 'Database connection failed with sensitive sql details',
+      }),
+    } as Response)
+
+    await expect(logoutUser()).rejects.toThrow('Unable to complete sign-out right now. Please try again.')
+  })
+
+  it('throws ApiError with status 0 on network disconnect', async () => {
+    vi.mocked(fetch).mockRejectedValueOnce(new Error('Failed to fetch'))
+
+    const promise = logoutUser()
     await expect(promise).rejects.toThrow('Unable to connect to the server.')
     await expect(promise).rejects.toBeInstanceOf(ApiError)
   })

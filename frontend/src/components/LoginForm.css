@@ -44,3 +44,7 @@
   outline: 2px solid var(--border-focus);
   border-radius: var(--radius-sm);
 }
+
+.logout-btn {
+  margin-top: 1.5rem;
+}

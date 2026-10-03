@@ -2,7 +2,7 @@
 
 ## 1. Overview & Current Status
 
-**Status: Step 4 — Backend Implementation Complete ✅ (Steps 5–10 Pending)**
+**Status: Step 5 — Frontend Implementation Complete ✅ (Steps 6–10 Pending)**
 
 Logout provides secure session termination for authenticated users by revoking the persistent refresh-token session identified by the incoming `refreshToken` cookie and instructing the user agent to clear the cookie.
 
@@ -12,7 +12,7 @@ Logout provides secure session termination for authenticated users by revoking t
 - **Step 2: Design** — Complete (API contract: `POST /api/auth/logout`, cookie-based session identification, HTTP 204 No Content response)
 - **Step 3: Security Analysis** — Complete (Threat modeling: session isolation, token oracle defense, sensitive data exposure defense, CSRF boundary)
 - **Step 4: Backend Implementation** — Complete (`POST /api/auth/logout`, `ILogoutUserHandler`, `LogoutUserHandler`, single-session revocation, HttpOnly cookie deletion, idempotent 204 response, 173 passing backend tests including 22 Logout-specific tests)
-- **Step 5: Frontend Implementation** — Pending
+- **Step 5: Frontend Implementation** — Complete (`logoutUser` API client, `AuthContext.logout`, authenticated-view Log Out control, local state cleared even on API failure, memory-only access token preserved, HttpOnly refresh cookie untouched by JavaScript)
 - **Step 6: Integration** — Pending
 - **Step 7: End-to-End Testing** — Pending
 - **Step 8: Security Testing** — Pending
@@ -82,10 +82,10 @@ HTTP 204 No Content
 
 ### Key Components
 
-1. **`AuthController.Logout`** ([AuthController.cs](file:///c:/Users/User/source/repos/VaultX/src/PasswordManager.API/Controllers/AuthController.cs)): Thin controller action; extracts `refreshToken` cookie, invokes `_logoutUserHandler.HandleAsync`, issues cookie deletion instruction with matching configuration, returns `NoContent()`.
-2. **`ILogoutUserHandler` / `LogoutUserHandler`** ([LogoutUserHandler.cs](file:///c:/Users/User/source/repos/VaultX/src/PasswordManager.Application/Features/Authentication/Logout/LogoutUserHandler.cs)): Application service responsible for hashing the raw refresh token, retrieving the matching entity from `IRefreshTokenRepository`, and revoking it if active.
-3. **`RefreshToken` Domain Entity** ([RefreshToken.cs](file:///c:/Users/User/source/repos/VaultX/src/PasswordManager.Domain/Entities/RefreshToken.cs)): Encapsulates `RevokedAt` timestamp and `IsActive` logic (`!IsRevoked && !IsExpired`).
-4. **`RefreshTokenRepository`** ([RefreshTokenRepository.cs](file:///c:/Users/User/source/repos/VaultX/src/PasswordManager.Infrastructure/Repositories/RefreshTokenRepository.cs)): Queries `RefreshTokens` by `TokenHash`.
+1. **`AuthController.Logout`** ([AuthController.cs](../../src/PasswordManager.API/Controllers/AuthController.cs)): Thin controller action; extracts `refreshToken` cookie, invokes `_logoutUserHandler.HandleAsync`, issues cookie deletion instruction with matching configuration, returns `NoContent()`.
+2. **`ILogoutUserHandler` / `LogoutUserHandler`** ([LogoutUserHandler.cs](../../src/PasswordManager.Application/Features/Authentication/Logout/LogoutUserHandler.cs)): Application service responsible for hashing the raw refresh token, retrieving the matching entity from `IRefreshTokenRepository`, and revoking it if active.
+3. **`RefreshToken` Domain Entity** ([RefreshToken.cs](../../src/PasswordManager.Domain/Entities/RefreshToken.cs)): Encapsulates `RevokedAt` timestamp and `IsActive` logic (`!IsRevoked && !IsExpired`).
+4. **`RefreshTokenRepository`** ([RefreshTokenRepository.cs](../../src/PasswordManager.Infrastructure/Repositories/RefreshTokenRepository.cs)): Queries `RefreshTokens` by `TokenHash`.
 
 ---
 
@@ -150,7 +150,7 @@ VaultX supports multiple concurrent sessions per user account (e.g., desktop bro
 
 ## 9. Backend Test Suite Coverage
 
-### Unit Tests ([LogoutUserHandlerTests.cs](file:///c:/Users/User/source/repos/VaultX/tests/PasswordManager.UnitTests/Application/LogoutUserHandlerTests.cs)) — 9 Tests
+### Unit Tests ([LogoutUserHandlerTests.cs](../../tests/PasswordManager.UnitTests/Application/LogoutUserHandlerTests.cs)) — 9 Tests
 - `HandleAsync_NullCommand_ThrowsArgumentNullException`
 - `HandleAsync_NullOrWhitespaceToken_ReturnsWithoutInteractingWithRepository` (Theory: null, empty, whitespace)
 - `HandleAsync_ValidActiveToken_RevokesMatchingSessionAndSaves`
@@ -159,7 +159,7 @@ VaultX supports multiple concurrent sessions per user account (e.g., desktop bro
 - `HandleAsync_ExpiredToken_DoesNotRevokeOrSave`
 - `HandleAsync_MalformedTokenCausingArgumentException_DoesNotThrowAndDoesNotSave`
 
-### Integration Tests ([AuthControllerLogoutIntegrationTests.cs](file:///c:/Users/User/source/repos/VaultX/tests/PasswordManager.IntegrationTests/Controllers/AuthControllerLogoutIntegrationTests.cs)) — 13 Tests
+### Integration Tests ([AuthControllerLogoutIntegrationTests.cs](../../tests/PasswordManager.IntegrationTests/Controllers/AuthControllerLogoutIntegrationTests.cs)) — 13 Tests
 - `Logout_ValidSession_Returns204AndRevokesTokenInDatabase`
 - `Logout_InstructsBrowserToDeleteRefreshTokenCookie`
 - `Logout_MissingCookie_Returns204NoContentWithoutModifyingDatabase`
@@ -179,15 +179,70 @@ VaultX supports multiple concurrent sessions per user account (e.g., desktop bro
 
 ---
 
-## 10. Deferred Work
+## 10. Frontend Implementation (Step 5)
 
-The following items are outside the scope of Step 4 (Backend Implementation) and deferred to subsequent lifecycle steps or future roadmap phases:
+### Frontend Logout Flow
 
-1. **Step 5: Frontend Logout Implementation:** React UI components, logout button, `AuthContext` state clearing, token removal from memory.
-2. **Step 6: Integration Testing:** End-to-end frontend-to-backend logout flow.
-3. **Step 7: Browser E2E Testing:** Playwright real-browser logout scenarios.
-4. **Step 8: Dedicated Security Testing:** Penetration testing and security hardening for logout.
-5. **Token Refresh Endpoint (`POST /api/auth/refresh`):** Replay detection and token rotation.
-6. **Protected Routes:** Phase 2, Section 6.4.
-7. **Global Logout / All-Device Session Revocation:** Phase 2, Section 6.5+ / Session Management.
-8. **JWT Blacklisting:** Explicitly avoided due to stateless architecture.
+```text
+User clicks Log Out
+       ↓
+AuthContext.logout()
+       ↓
+POST /api/auth/logout  (credentials: 'include', no body)
+       ↓
+Browser automatically attaches HttpOnly refreshToken cookie
+       ↓
+Backend revokes refresh session + clears cookie (HTTP 204)
+       ↓
+Frontend clears in-memory AuthState:
+  status = 'unauthenticated'
+  accessToken = null
+  expiresAt = null
+       ↓
+Authenticated UI disappears; Sign In UI becomes available
+```
+
+### Components & Responsibilities
+
+1. **`logoutUser()`** ([auth.ts](../../frontend/src/api/auth.ts)): Dedicated API client function. Sends `POST /api/auth/logout` with `credentials: 'include'` and **no request body**. Never reads, sends, or stores the refresh token from JavaScript. Treats HTTP 204 as success.
+2. **`AuthContext.logout()`** ([AuthContext.tsx](../../frontend/src/context/AuthContext.tsx)): Attempts server logout, then **always** clears local in-memory auth state in a `finally` block. If the API call fails, local state is still cleared and the error is rethrown so callers do not falsely claim server session revocation succeeded.
+3. **Log Out control** ([LoginForm.tsx](../../frontend/src/components/LoginForm.tsx)): Rendered only in the existing authenticated session view. Button semantics with loading/disabled state (`Signing Out...`) to prevent duplicate requests. Swallows API errors after local cleanup without rendering stack traces, tokens, or server internals.
+
+### Local Cleanup on Network Failure
+
+| Outcome | Server session revoked? | Local auth cleared? | UI state |
+| :--- | :---: | :---: | :--- |
+| HTTP 204 success | Yes (requested) | Yes | Unauthenticated |
+| Network / API failure | Unknown / not confirmed | Yes | Unauthenticated |
+
+Local logout (frontend state clearing) is unconditional. Server logout confirmation is never claimed when the request fails.
+
+### Token & Cookie Security (Frontend)
+
+- Access token remains **memory-only** in React `AuthContext` state — never written to `localStorage`, `sessionStorage`, IndexedDB, or URL.
+- Refresh token remains **HttpOnly** and browser-managed — frontend never reads `document.cookie` for `refreshToken`, never deletes the cookie from JavaScript, and never places it in body/headers/URL.
+- Cookie transmission relies on the same `credentials: 'include'` pattern established by Login, with the Vite `/api` proxy preserving same-origin cookie behavior in development.
+- No second authentication store; reuses existing `AuthContext` / `useAuth` architecture.
+- Protected routes, dashboard, vault, and session-management UI are **not** implemented in Step 5.
+
+### Frontend Test Coverage (Step 5)
+
+- **API client** (`authApi.test.ts`): `POST /api/auth/logout` contract, no body, `credentials: 'include'`, HTTP 204 handling, safe 500 message, network failure.
+- **AuthContext** (`Logout.test.tsx`): Successful logout clears `status` / `accessToken` / `expiresAt`; **mandatory** network-failure test still clears local state; no storage/URL/cookie exposure.
+- **UI control** (`Logout.test.tsx`): Log Out rendered when authenticated; click invokes logout; loading/disabled prevents duplicates; failure still transitions to Sign In without exposing sensitive details.
+
+---
+
+## 11. Deferred Work
+
+The following items are outside the scope of Step 5 (Frontend Implementation) and deferred to subsequent lifecycle steps or future roadmap phases:
+
+1. **Step 6: Integration Testing:** End-to-end frontend-to-backend logout flow.
+2. **Step 7: Browser E2E Testing:** Playwright real-browser logout scenarios.
+3. **Step 8: Dedicated Security Testing:** Penetration testing and security hardening for logout.
+4. **Step 9: Documentation Finalization:** Complete feature documentation after Steps 6–8.
+5. **Step 10: Feature Complete:** Mark Logout complete only after Steps 6–9.
+6. **Token Refresh Endpoint (`POST /api/auth/refresh`):** Replay detection and token rotation.
+7. **Protected Routes:** Phase 2, Section 6.4.
+8. **Global Logout / All-Device Session Revocation:** Phase 2, Section 6.5+ / Session Management.
+9. **JWT Blacklisting:** Explicitly avoided due to stateless architecture.
