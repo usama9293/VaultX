@@ -2,7 +2,7 @@
 
 ## 1. Overview & Current Status
 
-**Status: Step 5 — Frontend Implementation Complete ✅ (Steps 6–10 Pending)**
+**Status: Step 6 — Integration Complete ✅ (Steps 7–10 Pending)**
 
 Logout provides secure session termination for authenticated users by revoking the persistent refresh-token session identified by the incoming `refreshToken` cookie and instructing the user agent to clear the cookie.
 
@@ -13,7 +13,7 @@ Logout provides secure session termination for authenticated users by revoking t
 - **Step 3: Security Analysis** — Complete (Threat modeling: session isolation, token oracle defense, sensitive data exposure defense, CSRF boundary)
 - **Step 4: Backend Implementation** — Complete (`POST /api/auth/logout`, `ILogoutUserHandler`, `LogoutUserHandler`, single-session revocation, HttpOnly cookie deletion, idempotent 204 response, 173 passing backend tests including 22 Logout-specific tests)
 - **Step 5: Frontend Implementation** — Complete (`logoutUser` API client, `AuthContext.logout`, authenticated-view Log Out control, local state cleared even on API failure, memory-only access token preserved, HttpOnly refresh cookie untouched by JavaScript)
-- **Step 6: Integration** — Pending
+- **Step 6: Integration** — Complete (End-to-end integration verified across frontend state, HTTP contract, cookie deletion, and database session revocation)
 - **Step 7: End-to-End Testing** — Pending
 - **Step 8: Security Testing** — Pending
 - **Step 9: Documentation** — In Progress (this document)
@@ -233,16 +233,146 @@ Local logout (frontend state clearing) is unconditional. Server logout confirmat
 
 ---
 
-## 11. Deferred Work
+## 11. Integration Testing (Step 6)
 
-The following items are outside the scope of Step 5 (Frontend Implementation) and deferred to subsequent lifecycle steps or future roadmap phases:
+### Integration Architecture
 
-1. **Step 6: Integration Testing:** End-to-end frontend-to-backend logout flow.
-2. **Step 7: Browser E2E Testing:** Playwright real-browser logout scenarios.
-3. **Step 8: Dedicated Security Testing:** Penetration testing and security hardening for logout.
-4. **Step 9: Documentation Finalization:** Complete feature documentation after Steps 6–8.
-5. **Step 10: Feature Complete:** Mark Logout complete only after Steps 6–9.
-6. **Token Refresh Endpoint (`POST /api/auth/refresh`):** Replay detection and token rotation.
-7. **Protected Routes:** Phase 2, Section 6.4.
-8. **Global Logout / All-Device Session Revocation:** Phase 2, Section 6.5+ / Session Management.
-9. **JWT Blacklisting:** Explicitly avoided due to stateless architecture.
+The Step 6 integration verifies that frontend client actions, HTTP cookie transports, ASP.NET Core API pipeline, application handlers, and PostgreSQL database persistence work together in harmony without leaking sensitive data or modifying unrelated records:
+
+```text
+┌────────────────────────────────────────────────────────┐
+│                   React Frontend Tree                  │
+│  [LoginForm] ──> [useAuth / AuthContext] ──> [auth.ts] │
+└───────────────────────────┬────────────────────────────┘
+                            │ POST /api/auth/logout
+                            │ credentials: 'include'
+                            │ Cookie: refreshToken=<token>
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│                   ASP.NET Core API                     │
+│  [AuthController.Logout]                               │
+│    ├─> Cookie Parsing (Request.Cookies["refreshToken"])│
+│    ├─> Mediator Command (LogoutCommand)                │
+│    └─> Cookie Deletion (Response.Cookies.Delete)       │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│                  Application Layer                     │
+│  [LogoutUserHandler]                                   │
+│    ├─> ITokenService.HashRefreshToken (SHA-256)        │
+│    └─> IRefreshTokenRepository.GetByHashAsync         │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│               Infrastructure & Database                │
+│  [RefreshTokenRepository / ApplicationDbContext]       │
+│    ├─> RefreshToken.Revoke() (RevokedAt = UtcNow)      │
+│    └─> PostgreSQL ("RefreshTokens" table)              │
+└────────────────────────────────────────────────────────┘
+```
+
+### Actual Integration Flows
+
+1. **Full Logout Lifecycle Flow:**
+   - Registration creates a persistent User record.
+   - Login generates a cryptographically secure refresh token, stores its SHA-256 hash in the database (`IsActive=true`, `RevokedAt=null`), and issues an HttpOnly cookie.
+   - Client sends `POST /api/auth/logout` with the cookie attached.
+   - Backend queries database by token hash, sets `RevokedAt` to `DateTime.UtcNow`, and commits changes.
+   - Backend issues `Set-Cookie: refreshToken=; Path=/api/auth; HttpOnly; SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT` (or `Max-Age=0`).
+   - Server returns `HTTP 204 No Content` with zero response body bytes.
+   - Database confirms the session is revoked and inactive, while the user entity remains completely intact.
+
+2. **Session Isolation Flow:**
+   - User logs in from two independent clients (e.g., Session A and Session B).
+   - Calling logout for Session A revokes only Session A's record (`IsRevoked=true`, `RevokedAt!=null`).
+   - Session B remains fully active and unrevoked (`IsActive=true`, `RevokedAt=null`).
+   - User profile and credentials remain unaltered.
+
+3. **Missing & Malformed Cookie Resilience Flow:**
+   - Client sends `POST /api/auth/logout` without a `refreshToken` cookie.
+   - Server returns `HTTP 204 No Content`, emits cookie deletion header to clear any stale client state, and makes zero modifications to database records.
+
+4. **Revocation Idempotency Flow:**
+   - Subsequent logout requests using an already-revoked session return `HTTP 204 No Content`.
+   - The initial `RevokedAt` timestamp is preserved and not overwritten.
+
+5. **Expired Session Flow:**
+   - Sending an expired session token returns `HTTP 204 No Content`.
+   - The session record remains expired and is not reactivated.
+
+6. **Data Integrity & Non-Deletion Flow:**
+   - Logout operations never delete rows from `Users` or `RefreshTokens`.
+   - Record counts remain identical before and after logout; existing records are updated rather than deleted.
+   - Unrelated users and their active sessions are completely untouched.
+
+7. **Frontend Application Integration Flow:**
+   - Mounting the application authentication tree and triggering Log Out executes `POST /api/auth/logout` with `credentials: 'include'` and no request body.
+   - Authenticated UI transitions seamlessly back to the Sign In form.
+   - In-memory `accessToken` and `expiresAt` are immediately wiped from React state.
+   - No token data is written to or retained in `localStorage`, `sessionStorage`, or URL parameters.
+   - Network failure triggers local cleanup in a `finally` block, returns the UI to Sign In, suppresses raw error displays, and prevents token exposure.
+   - Pending logout requests display "Signing Out..." loading state and disable the button, preventing duplicate submissions.
+
+### Test Coverage & Results
+
+#### Backend Integration Tests ([LogoutIntegrationTests.cs](../../tests/PasswordManager.IntegrationTests/Integration/LogoutIntegrationTests.cs)) — 7 Tests
+- `Registration_Then_Login_Then_Logout_FullLifecycle_Succeeds_WithDatabaseRevocation_AndCookieDeletion` — Verifies complete lifecycle from account registration to session revocation and cookie deletion.
+- `Logout_CookieDeletion_AdheresToContract_AndEnvironmentAwareSecurePolicy` — Verifies cookie deletion contract (`refreshToken`, `/api/auth`, `HttpOnly`, `SameSite=Lax`, expiration) and dynamic `Secure` flag policy across HTTP and HTTPS schemes.
+- `Logout_MultipleSessions_RevokesOnlyTargetSession_LeavingOtherSessionsActive` — Verifies single-session revocation and multi-session isolation.
+- `Logout_WithoutCookie_Returns204NoContent_WithoutModifyingDatabase` — Verifies missing cookie resilience and database immutability.
+- `Logout_AlreadyRevokedSession_Returns204NoContent_IdempotentlyPreservingTimestamp` — Verifies idempotent 204 response and timestamp preservation.
+- `Logout_ExpiredSession_Returns204NoContent_DoesNotReactivate` — Verifies expired session handling without reactivation.
+- `Logout_PreservesUserData_PasswordHash_AndUnrelatedRecords` — Verifies user and session row preservation, password hash immutability, and isolation of unrelated user sessions.
+
+#### Frontend Integration Tests ([LogoutIntegration.test.tsx](../../frontend/src/__tests__/LogoutIntegration.test.tsx)) — 4 Tests
+- `1. Authenticated App Logout Flow: executes POST /api/auth/logout with credentials, transitions UI to Sign In, wipes in-memory auth state, and leaves no storage or URL trace`
+- `1b. Full App Flow: user logs in through App, establishes session, logs out, and App transitions back to Sign In`
+- `2. Network Failure: clears local auth state, returns UI to Sign In, suppresses raw exception, and prevents token exposure`
+- `3. Loading & Duplicate Prevention: shows Signing Out... state, disables button, and prevents duplicate API calls while request is in flight`
+
+#### Test Suite Execution Summary
+- **Backend Unit Tests:** 78 / 78 passed (100%)
+- **Backend Integration Tests:** 102 / 102 passed (100%, including all 20 Logout tests)
+- **Frontend Tests:** 87 / 87 passed (100%, including all 4 Logout integration tests)
+- **Total Automated Tests:** 267 / 267 passed (100%)
+- **Frontend Linter:** 0 warnings, 0 errors
+- **Frontend Build:** Successful production bundle
+
+### Important Integration Decisions
+
+1. **Strict Cookie-Only Session Identification:** The integration confirms that session termination relies exclusively on the HttpOnly `refreshToken` cookie. No client-supplied IDs or body payloads are inspected or permitted.
+2. **Dynamic Secure Cookie Policy:** The cookie deletion policy matches the server environment and connection scheme: in development HTTP, the Secure flag is omitted for browser compatibility, while in HTTPS requests and non-development environments, the Secure flag is enforced.
+3. **Unconditional Local Cleanup with Error Propagation:** The frontend architecture clears React in-memory authentication state regardless of whether the backend request succeeds or fails, while the UI swallows the raw exception so as not to expose internal network details or claim server-side revocation when it could not be confirmed.
+4. **Idempotence and Non-Disclosure:** All non-standard scenarios (missing cookie, already revoked, expired session, unknown token) return identical `HTTP 204 No Content` responses, preventing session enumeration or state oracle attacks.
+
+### Step 6 Acceptance Criteria & Results
+
+| Criterion | Requirement | Result | Evidence |
+| :--- | :--- | :---: | :--- |
+| **AC-6.1: Full Lifecycle** | Complete registration -> login -> logout cycle with DB revocation & cookie deletion | **PASS** | `Registration_Then_Login_Then_Logout_FullLifecycle_Succeeds_WithDatabaseRevocation_AndCookieDeletion` |
+| **AC-6.2: Session Isolation** | Revoking session A leaves session B active; user remains unchanged | **PASS** | `Logout_MultipleSessions_RevokesOnlyTargetSession_LeavingOtherSessionsActive` |
+| **AC-6.3: Missing Cookie Resilience** | Logout without cookie returns 204 and clears cookie without DB mutations | **PASS** | `Logout_WithoutCookie_Returns204NoContent_WithoutModifyingDatabase` |
+| **AC-6.4: Revocation Idempotency** | Logging out already-revoked session returns 204 and preserves `RevokedAt` | **PASS** | `Logout_AlreadyRevokedSession_Returns204NoContent_IdempotentlyPreservingTimestamp` |
+| **AC-6.5: Expired Session Handling** | Logging out expired session returns 204 without reactivating record | **PASS** | `Logout_ExpiredSession_Returns204NoContent_DoesNotReactivate` |
+| **AC-6.6: Data Preservation** | User record, password hash, and unrelated rows are preserved intact | **PASS** | `Logout_PreservesUserData_PasswordHash_AndUnrelatedRecords` |
+| **AC-6.7: Cookie Deletion Contract** | Name, path, HttpOnly, SameSite, and environment-aware Secure attributes verified | **PASS** | `Logout_CookieDeletion_AdheresToContract_AndEnvironmentAwareSecurePolicy` |
+| **AC-6.8: Frontend App Flow** | React app transitions to Sign In, clears in-memory state, zero persistent storage | **PASS** | `LogoutIntegration.test.tsx` (Tests 1 & 1b) |
+| **AC-6.9: Network Failure Resilience**| Local auth state cleared, UI returns to Sign In, raw errors suppressed | **PASS** | `LogoutIntegration.test.tsx` (Test 2) |
+| **AC-6.10: Duplicate Prevention** | Loading state disables button and prevents duplicate in-flight API requests | **PASS** | `LogoutIntegration.test.tsx` (Test 3) |
+
+---
+
+## 12. Deferred Work
+
+The following items are outside the scope of Step 6 (Integration) and deferred to subsequent lifecycle steps or future roadmap phases:
+
+1. **Step 7: Browser E2E Testing:** Playwright real-browser logout scenarios.
+2. **Step 8: Dedicated Security Testing:** Penetration testing and security hardening for logout.
+3. **Step 9: Documentation Finalization:** Complete feature documentation after Steps 6–8.
+4. **Step 10: Feature Complete:** Mark Logout complete only after Steps 6–9.
+5. **Token Refresh Endpoint (`POST /api/auth/refresh`):** Replay detection and token rotation.
+6. **Protected Routes:** Phase 2, Section 6.4.
+7. **Global Logout / All-Device Session Revocation:** Phase 2, Section 6.5+ / Session Management.
+8. **JWT Blacklisting:** Explicitly avoided due to stateless architecture.

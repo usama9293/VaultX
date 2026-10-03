@@ -481,7 +481,7 @@ Authenticated Frontend
 
 ## 6.3 Logout
 
-**Status: Step 5 — Frontend Implementation Complete ✅ (Steps 6–10 Pending)**
+**Status: Step 6 — Integration Complete ✅ (Steps 7–10 Pending)**
 
 ### Vertical Slice Lifecycle Summary
 
@@ -490,10 +490,10 @@ Authenticated Frontend
 - **Step 3: Security Analysis** — Complete (Threat modeling: session isolation, token oracle defense, sensitive data exposure defense, CSRF boundary)
 - **Step 4: Backend Implementation** — Complete (`POST /api/auth/logout`, `ILogoutUserHandler`, `LogoutUserHandler`, single-session revocation, HttpOnly cookie deletion, idempotent 204 response, 173 total passing backend tests including 22 Logout-specific tests)
 - **Step 5: Frontend Implementation** — Complete (`logoutUser` API client, `AuthContext.logout`, authenticated Log Out control, local auth cleared even on API failure, memory-only access token, HttpOnly refresh cookie untouched by JS)
-- **Step 6: Integration** — Pending
+- **Step 6: Integration** — Complete (Verified end-to-end integration flow from React UI through API to DB, cookie deletion contract, environment-aware secure policy, and in-memory auth state clearing)
 - **Step 7: End-to-End Testing** — Pending
 - **Step 8: Security Testing** — Pending
-- **Step 9: Documentation** — In Progress (`docs/features/logout.md` updated for Steps 4–5)
+- **Step 9: Documentation** — In Progress (`docs/features/logout.md` updated for Steps 4–6)
 - **Step 10: Complete** — Pending
 
 ### Backend Implementation Summary
@@ -520,6 +520,20 @@ Implemented:
 - Log Out button on authenticated session view with loading/disabled state to prevent duplicate requests
 - Access token remains memory-only; refresh token remains HttpOnly and is never read or deleted by frontend JavaScript
 - No protected routes, dashboard, vault, or session-management UI introduced in this step
+
+### Integration Summary (Step 6)
+
+Verified:
+
+- Real end-to-end lifecycle: Registration -> Login -> Session establishment -> DB verification -> POST /api/auth/logout -> HTTP 204 No Content -> Cookie deletion response -> DB session revocation (`RevokedAt` populated, `IsActive=false`).
+- Session isolation: Logout of Session A revokes Session A while Session B remains active and unrevoked (`RevokedAt=null`, `IsActive=true`).
+- Missing cookie resilience: `POST /api/auth/logout` without cookie returns HTTP 204, issues cookie deletion header, and leaves all DB sessions unmodified.
+- Revocation idempotency: Logout on already-revoked session returns HTTP 204 without exception and preserves the original `RevokedAt` timestamp.
+- Expired session handling: Logout with expired session returns HTTP 204 without reactivating the expired record.
+- Data preservation: Target user, password hash, and unrelated user records & sessions are preserved intact across logout; session records are updated, not deleted.
+- Cookie deletion contract & environment-awareness: Cookie deletion header specifies `refreshToken`, `Path=/api/auth`, `HttpOnly=true`, `SameSite=Lax`, expiration (`max-age=0` / `expires=1970`), with `Secure` flag dynamically adapting based on HTTPS / environment context.
+- Frontend application integration: React application tree transitions from authenticated state to Sign In form, wipes in-memory access token and expiration from `AuthContext`, leaves zero trace in `localStorage`, `sessionStorage`, or URL, safely handles network failures without raw error leakage, and prevents duplicate submissions while request is in flight.
+- Test metrics: 180 total backend tests (100% passing, including 20 Logout tests) + 87 total frontend tests (100% passing, including 4 Logout integration tests).
 
 ### Architectural Constraints & Limitations
 
