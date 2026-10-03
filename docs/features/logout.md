@@ -82,10 +82,10 @@ HTTP 204 No Content
 
 ### Key Components
 
-1. **`AuthController.Logout`** ([AuthController.cs](file:///c:/Users/User/source/repos/VaultX/src/PasswordManager.API/Controllers/AuthController.cs)): Thin controller action; extracts `refreshToken` cookie, invokes `_logoutUserHandler.HandleAsync`, issues cookie deletion instruction with matching configuration, returns `NoContent()`.
-2. **`ILogoutUserHandler` / `LogoutUserHandler`** ([LogoutUserHandler.cs](file:///c:/Users/User/source/repos/VaultX/src/PasswordManager.Application/Features/Authentication/Logout/LogoutUserHandler.cs)): Application service responsible for hashing the raw refresh token, retrieving the matching entity from `IRefreshTokenRepository`, and revoking it if active.
-3. **`RefreshToken` Domain Entity** ([RefreshToken.cs](file:///c:/Users/User/source/repos/VaultX/src/PasswordManager.Domain/Entities/RefreshToken.cs)): Encapsulates `RevokedAt` timestamp and `IsActive` logic (`!IsRevoked && !IsExpired`).
-4. **`RefreshTokenRepository`** ([RefreshTokenRepository.cs](file:///c:/Users/User/source/repos/VaultX/src/PasswordManager.Infrastructure/Repositories/RefreshTokenRepository.cs)): Queries `RefreshTokens` by `TokenHash`.
+1. **`AuthController.Logout`** ([AuthController.cs](../../src/PasswordManager.API/Controllers/AuthController.cs)): Thin controller action; extracts `refreshToken` cookie, invokes `_logoutUserHandler.HandleAsync`, issues cookie deletion instruction with matching configuration, returns `NoContent()`.
+2. **`ILogoutUserHandler` / `LogoutUserHandler`** ([LogoutUserHandler.cs](../../src/PasswordManager.Application/Features/Authentication/Logout/LogoutUserHandler.cs)): Application service responsible for hashing the raw refresh token, retrieving the matching entity from `IRefreshTokenRepository`, and revoking it if active.
+3. **`RefreshToken` Domain Entity** ([RefreshToken.cs](../../src/PasswordManager.Domain/Entities/RefreshToken.cs)): Encapsulates `RevokedAt` timestamp and `IsActive` logic (`!IsRevoked && !IsExpired`).
+4. **`RefreshTokenRepository`** ([RefreshTokenRepository.cs](../../src/PasswordManager.Infrastructure/Repositories/RefreshTokenRepository.cs)): Queries `RefreshTokens` by `TokenHash`.
 
 ---
 
@@ -150,7 +150,7 @@ VaultX supports multiple concurrent sessions per user account (e.g., desktop bro
 
 ## 9. Backend Test Suite Coverage
 
-### Unit Tests ([LogoutUserHandlerTests.cs](file:///c:/Users/User/source/repos/VaultX/tests/PasswordManager.UnitTests/Application/LogoutUserHandlerTests.cs)) — 9 Tests
+### Unit Tests ([LogoutUserHandlerTests.cs](../../tests/PasswordManager.UnitTests/Application/LogoutUserHandlerTests.cs)) — 9 Tests
 - `HandleAsync_NullCommand_ThrowsArgumentNullException`
 - `HandleAsync_NullOrWhitespaceToken_ReturnsWithoutInteractingWithRepository` (Theory: null, empty, whitespace)
 - `HandleAsync_ValidActiveToken_RevokesMatchingSessionAndSaves`
@@ -159,7 +159,7 @@ VaultX supports multiple concurrent sessions per user account (e.g., desktop bro
 - `HandleAsync_ExpiredToken_DoesNotRevokeOrSave`
 - `HandleAsync_MalformedTokenCausingArgumentException_DoesNotThrowAndDoesNotSave`
 
-### Integration Tests ([AuthControllerLogoutIntegrationTests.cs](file:///c:/Users/User/source/repos/VaultX/tests/PasswordManager.IntegrationTests/Controllers/AuthControllerLogoutIntegrationTests.cs)) — 13 Tests
+### Integration Tests ([AuthControllerLogoutIntegrationTests.cs](../../tests/PasswordManager.IntegrationTests/Controllers/AuthControllerLogoutIntegrationTests.cs)) — 13 Tests
 - `Logout_ValidSession_Returns204AndRevokesTokenInDatabase`
 - `Logout_InstructsBrowserToDeleteRefreshTokenCookie`
 - `Logout_MissingCookie_Returns204NoContentWithoutModifyingDatabase`
@@ -204,9 +204,9 @@ Authenticated UI disappears; Sign In UI becomes available
 
 ### Components & Responsibilities
 
-1. **`logoutUser()`** ([auth.ts](file:///c:/Users/User/source/repos/VaultX/frontend/src/api/auth.ts)): Dedicated API client function. Sends `POST /api/auth/logout` with `credentials: 'include'` and **no request body**. Never reads, sends, or stores the refresh token from JavaScript. Treats HTTP 204 as success.
-2. **`AuthContext.logout()`** ([AuthContext.tsx](file:///c:/Users/User/source/repos/VaultX/frontend/src/context/AuthContext.tsx)): Attempts server logout, then **always** clears local in-memory auth state in a `finally` block. If the API call fails, local state is still cleared and the error is rethrown so callers do not falsely claim server session revocation succeeded.
-3. **Log Out control** ([LoginForm.tsx](file:///c:/Users/User/source/repos/VaultX/frontend/src/components/LoginForm.tsx)): Rendered only in the existing authenticated session view. Button semantics with loading/disabled state (`Signing Out...`) to prevent duplicate requests. Swallows API errors after local cleanup without rendering stack traces, tokens, or server internals.
+1. **`logoutUser()`** ([auth.ts](../../frontend/src/api/auth.ts)): Dedicated API client function. Sends `POST /api/auth/logout` with `credentials: 'include'` and **no request body**. Never reads, sends, or stores the refresh token from JavaScript. Treats HTTP 204 as success.
+2. **`AuthContext.logout()`** ([AuthContext.tsx](../../frontend/src/context/AuthContext.tsx)): Attempts server logout, then **always** clears local in-memory auth state in a `finally` block. If the API call fails, local state is still cleared and the error is rethrown so callers do not falsely claim server session revocation succeeded.
+3. **Log Out control** ([LoginForm.tsx](../../frontend/src/components/LoginForm.tsx)): Rendered only in the existing authenticated session view. Button semantics with loading/disabled state (`Signing Out...`) to prevent duplicate requests. Swallows API errors after local cleanup without rendering stack traces, tokens, or server internals.
 
 ### Local Cleanup on Network Failure
 
