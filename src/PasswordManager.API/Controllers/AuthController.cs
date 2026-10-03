@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using PasswordManager.Application.DTOs.Authentication;
 using PasswordManager.Application.Features.Authentication.Login;
+using PasswordManager.Application.Features.Authentication.Logout;
 using PasswordManager.Application.Features.Authentication.Register;
 
 namespace PasswordManager.API.Controllers;
@@ -11,15 +12,18 @@ public class AuthController : ControllerBase
 {
     private readonly IRegisterUserHandler _registerUserHandler;
     private readonly ILoginUserHandler _loginUserHandler;
+    private readonly ILogoutUserHandler _logoutUserHandler;
     private readonly IWebHostEnvironment _environment;
 
     public AuthController(
         IRegisterUserHandler registerUserHandler,
         ILoginUserHandler loginUserHandler,
+        ILogoutUserHandler logoutUserHandler,
         IWebHostEnvironment environment)
     {
         _registerUserHandler = registerUserHandler ?? throw new ArgumentNullException(nameof(registerUserHandler));
         _loginUserHandler = loginUserHandler ?? throw new ArgumentNullException(nameof(loginUserHandler));
+        _logoutUserHandler = logoutUserHandler ?? throw new ArgumentNullException(nameof(logoutUserHandler));
         _environment = environment ?? throw new ArgumentNullException(nameof(environment));
     }
 
@@ -65,5 +69,28 @@ public class AuthController : ControllerBase
         Response.Cookies.Append("refreshToken", result.RawRefreshToken, cookieOptions);
 
         return Ok(new LoginResponse(result.AccessToken, result.AccessTokenExpiresAt));
+    }
+
+    [HttpPost("logout")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> Logout(CancellationToken cancellationToken)
+    {
+        var rawRefreshToken = Request.Cookies["refreshToken"];
+
+        var command = new LogoutCommand(rawRefreshToken);
+        await _logoutUserHandler.HandleAsync(command, cancellationToken);
+
+        var cookieOptions = new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = !_environment.IsDevelopment() || Request.IsHttps,
+            SameSite = SameSiteMode.Lax,
+            Path = "/api/auth"
+        };
+
+        Response.Cookies.Delete("refreshToken", cookieOptions);
+
+        return NoContent();
     }
 }
