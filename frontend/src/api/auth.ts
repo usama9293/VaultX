@@ -106,3 +106,42 @@ export async function loginUser(request: LoginRequest): Promise<LoginResponse> {
   throw new ApiError(serverDetail, response.status, errorData)
 }
 
+/**
+ * Requests server-side session revocation via POST /api/auth/logout.
+ *
+ * The browser attaches the HttpOnly refreshToken cookie automatically when
+ * credentials: 'include' is set. The client must never read or send the
+ * refresh token from JavaScript.
+ *
+ * Success: HTTP 204 No Content (empty body).
+ */
+export async function logoutUser(): Promise<void> {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
+  const endpoint = `${baseUrl}/api/auth/logout`
+
+  let response: Response
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      credentials: 'include',
+    })
+  } catch {
+    throw new ApiError('Unable to connect to the server. Please check your connection and try again.', 0)
+  }
+
+  // Backend contract: HTTP 204 No Content with empty body
+  if (response.status === 204 || response.ok) {
+    return
+  }
+
+  let errorData: ApiErrorResponse | undefined
+  try {
+    errorData = (await response.json()) as ApiErrorResponse
+  } catch {
+    // Ignore JSON parse failure on non-JSON / empty response
+  }
+
+  // Safe generic fallback — never expose server internals
+  throw new ApiError('Unable to complete sign-out right now. Please try again.', response.status, errorData)
+}
+

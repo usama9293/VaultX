@@ -12,7 +12,7 @@ interface LoginFormProps {
 }
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onNavigateToRegister }) => {
-  const { authState, setSession } = useAuth()
+  const { authState, setSession, logout } = useAuth()
 
   const [formData, setFormData] = useState<LoginFormData>({
     email: '',
@@ -21,7 +21,22 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onNavigateToRegi
 
   const [errors, setErrors] = useState<LoginFormErrors>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return
+
+    setIsLoggingOut(true)
+    try {
+      await logout()
+    } catch {
+      // Local auth state is already cleared by AuthContext.logout.
+      // Do not claim server session revocation succeeded; do not expose raw errors.
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -117,8 +132,26 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onNavigateToRegi
           </p>
         </div>
 
+        <button
+          type="button"
+          className="submit-btn logout-btn"
+          onClick={handleLogout}
+          disabled={isLoggingOut}
+          aria-busy={isLoggingOut}
+          aria-label={isLoggingOut ? 'Signing Out...' : 'Log out'}
+        >
+          {isLoggingOut ? (
+            <>
+              <span className="spinner" aria-hidden="true" />
+              <span>Signing Out...</span>
+            </>
+          ) : (
+            'Log Out'
+          )}
+        </button>
+
         <footer className="form-footer-note">
-          Step 5 — Login Frontend Slice Complete
+          Step 5 — Logout Frontend Connected
         </footer>
       </div>
     )
