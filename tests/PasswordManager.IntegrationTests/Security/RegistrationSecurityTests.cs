@@ -220,6 +220,12 @@ public class RegistrationSecurityTests : IClassFixture<CustomWebApplicationFacto
 
         var responses = await Task.WhenAll(tasks);
 
+        var responseStatuses = string.Join(", ", responses.Select(response => (int)response.StatusCode));
+        Assert.All(responses, response =>
+            Assert.True(
+                response.StatusCode is HttpStatusCode.Created or HttpStatusCode.Conflict,
+                $"Every duplicate registration request must return 201 or 409. Received: [{responseStatuses}]"));
+
         var successCount = responses.Count(r => r.StatusCode == HttpStatusCode.Created);
         var conflictCount = responses.Count(r => r.StatusCode == HttpStatusCode.Conflict);
 

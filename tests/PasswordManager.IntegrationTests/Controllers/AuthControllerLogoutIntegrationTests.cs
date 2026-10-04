@@ -542,7 +542,7 @@ public class AuthControllerLogoutIntegrationTests : IClassFixture<CustomWebAppli
     public async Task Logout_SensitiveLoggingDoesNotExposeRefreshTokensOrHashes()
     {
         var logSink = new CapturingLoggerProvider();
-        var client = _factory.WithWebHostBuilder(builder =>
+        using var loggingFactory = _factory.WithWebHostBuilder(builder =>
         {
             builder.ConfigureLogging(logging =>
             {
@@ -550,20 +550,27 @@ public class AuthControllerLogoutIntegrationTests : IClassFixture<CustomWebAppli
                 logging.AddProvider(logSink);
                 logging.SetMinimumLevel(LogLevel.Information);
             });
-        }).CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
+        });
+        using var client = loggingFactory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
         {
             HandleCookies = false
         });
 
         const string email = "logout.log.sanitization@vaultx.local";
         const string password = "VaultX@SecurePass2026!";
-        await RegisterUserAsync(email, password);
+        var registrationResponse = await client.PostAsJsonAsync(
+            "/api/auth/register",
+            new RegisterUserRequest(email, password, password));
+        Assert.Equal(HttpStatusCode.Created, registrationResponse.StatusCode);
 
-        var validToken = await LoginAndGetRefreshTokenAsync(email, password);
+        var loginResponse = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(email, password));
+        Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+        var setCookie = loginResponse.Headers.GetValues("Set-Cookie").First(cookie => cookie.StartsWith("refreshToken="));
+        var validToken = setCookie.Split(';')[0]["refreshToken=".Length..];
         var tamperedToken = "tampered-token-logger-case";
         var expiredToken = "expired-token-logger-case";
 
-        using (var scope = _factory.Services.CreateScope())
+        using (var scope = loggingFactory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var tokenService = scope.ServiceProvider.GetRequiredService<ITokenService>();
@@ -603,7 +610,7 @@ public class AuthControllerLogoutIntegrationTests : IClassFixture<CustomWebAppli
         Assert.DoesNotContain($"refreshToken={tamperedToken}", logText, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain($"refreshToken={expiredToken}", logText, StringComparison.OrdinalIgnoreCase);
 
-        using (var scope = _factory.Services.CreateScope())
+        using (var scope = loggingFactory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var tokenService = scope.ServiceProvider.GetRequiredService<ITokenService>();

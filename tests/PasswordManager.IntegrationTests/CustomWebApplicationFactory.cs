@@ -11,7 +11,7 @@ namespace PasswordManager.IntegrationTests;
 
 public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 {
-    private SqliteConnection? _connection;
+    private string? _databasePath;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -21,12 +21,17 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
             services.RemoveAll(typeof(DbContextOptions<ApplicationDbContext>));
 
-            _connection = new SqliteConnection("DataSource=:memory:");
-            _connection.Open();
+            _databasePath = Path.Combine(Path.GetTempPath(), $"vaultx-integration-{Guid.NewGuid():N}.db");
+            var connectionString = new SqliteConnectionStringBuilder
+            {
+                DataSource = _databasePath,
+                Mode = SqliteOpenMode.ReadWriteCreate,
+                Pooling = false
+            }.ToString();
 
             services.AddDbContext<ApplicationDbContext>(options =>
             {
-                options.UseSqlite(_connection);
+                options.UseSqlite(connectionString);
             });
 
             var sp = services.BuildServiceProvider();
@@ -39,6 +44,10 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        _connection?.Dispose();
+
+        if (disposing && _databasePath is not null && File.Exists(_databasePath))
+        {
+            File.Delete(_databasePath);
+        }
     }
 }
