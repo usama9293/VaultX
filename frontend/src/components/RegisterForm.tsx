@@ -140,18 +140,12 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit }) => {
           <p className="success-email">
             Email: <strong>{registeredUser.email}</strong>
           </p>
-          <p className="success-note">
-            Your account has been registered on the server. Vault creation and authentication will be available in future milestone steps.
-          </p>
         </div>
 
         <button type="button" className="submit-btn" onClick={handleReset}>
           Register Another Account
         </button>
 
-        <footer className="form-footer-note">
-          Step 6E — Registration Integration Complete
-        </footer>
       </div>
     )
   }
@@ -318,9 +312,6 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit }) => {
         </button>
       </form>
 
-      <footer className="form-footer-note">
-        Step 6E — Connected to POST /api/auth/register
-      </footer>
     </div>
   )
 }

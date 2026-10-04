@@ -127,9 +127,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onNavigateToRegi
 
         <div className="form-status-alert success" role="status" aria-live="polite">
           <p className="success-heading">Session Established</p>
-          <p className="success-note">
-            Your short-lived access token is held strictly in application memory. Vault creation, decryption, and protected resources will be available in future milestone steps.
-          </p>
         </div>
 
         <button
@@ -150,9 +147,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onNavigateToRegi
           )}
         </button>
 
-        <footer className="form-footer-note">
-          Step 5 — Logout Frontend Connected
-        </footer>
       </div>
     )
   }
@@ -264,9 +258,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onNavigateToRegi
         </div>
       )}
 
-      <footer className="form-footer-note">
-        Step 5 — Connected to POST /api/auth/login
-      </footer>
     </div>
   )
 }

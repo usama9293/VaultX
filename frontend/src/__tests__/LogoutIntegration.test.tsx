@@ -111,6 +111,7 @@ describe('Logout Integration & Application Flow', () => {
     })
     expect(screen.getByRole('button', { name: /sign in to vaultx/i })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: /authenticated session/i })).toBeNull()
+    expect(screen.queryByText(/step 5|connected to post|integration complete|future milestone/i)).not.toBeInTheDocument()
 
     // 6. Verify Access token and expiresAt are completely removed from React state
     expect(screen.getByTestId('auth-status')).toHaveTextContent('unauthenticated')
