@@ -481,7 +481,7 @@ Authenticated Frontend
 
 ## 6.3 Logout
 
-**Status: Step 6 — Integration Complete ✅ (Steps 7–10 Pending)**
+**Status: Step 7 — End-to-End Testing Complete ✅ (Steps 8–10 Pending)**
 
 ### Vertical Slice Lifecycle Summary
 
@@ -491,9 +491,9 @@ Authenticated Frontend
 - **Step 4: Backend Implementation** — Complete (`POST /api/auth/logout`, `ILogoutUserHandler`, `LogoutUserHandler`, single-session revocation, HttpOnly cookie deletion, idempotent 204 response, 173 total passing backend tests including 22 Logout-specific tests)
 - **Step 5: Frontend Implementation** — Complete (`logoutUser` API client, `AuthContext.logout`, authenticated Log Out control, local auth cleared even on API failure, memory-only access token, HttpOnly refresh cookie untouched by JS)
 - **Step 6: Integration** — Complete (Verified end-to-end integration flow from React UI through API to DB, cookie deletion contract, environment-aware secure policy, and in-memory auth state clearing)
-- **Step 7: End-to-End Testing** — Pending
+- **Step 7: End-to-End Testing** — Complete (Verified in real Chromium browser using Playwright: complete user journey, cookie lifecycle, storage/URL boundary, network failure resilience, and loading/duplicate prevention; 12/12 passing E2E tests)
 - **Step 8: Security Testing** — Pending
-- **Step 9: Documentation** — In Progress (`docs/features/logout.md` updated for Steps 4–6)
+- **Step 9: Documentation** — In Progress (`docs/features/logout.md` updated for Steps 4–7)
 - **Step 10: Complete** — Pending
 
 ### Backend Implementation Summary
@@ -534,6 +534,19 @@ Verified:
 - Cookie deletion contract & environment-awareness: Cookie deletion header specifies `refreshToken`, `Path=/api/auth`, `HttpOnly=true`, `SameSite=Lax`, expiration (`max-age=0` / `expires=1970`), with `Secure` flag dynamically adapting based on HTTPS / environment context.
 - Frontend application integration: React application tree transitions from authenticated state to Sign In form, wipes in-memory access token and expiration from `AuthContext`, leaves zero trace in `localStorage`, `sessionStorage`, or URL, safely handles network failures without raw error leakage, and prevents duplicate submissions while request is in flight.
 - Test metrics: 180 total backend tests (100% passing, including 20 Logout tests) + 87 total frontend tests (100% passing, including 4 Logout integration tests).
+
+### End-to-End Testing Summary (Step 7)
+
+Verified in Real Browser:
+
+- Real Chromium browser user journey from authenticated session view to unauthenticated Sign In state upon clicking Log Out
+- Real HTTP 204 No Content contract issued by browser on `POST /api/auth/logout` with empty body
+- Complete removal of `refreshToken` cookie from the browser cookie jar after logout
+- Verified that `refreshToken` HttpOnly cookie is never exposed to client JavaScript via `document.cookie`
+- Access token is never stored in `localStorage`, `sessionStorage`, URL search parameters, or URL hash during or after logout
+- Network failure resilience: aborting `POST /api/auth/logout` still clears local in-memory auth state, returns UI to Sign In, and prevents exposure of raw exceptions, stack traces, or tokens
+- Loading and duplicate prevention: pending logout request displays "Signing Out...", disables the button, sets `aria-busy="true"`, and suppresses duplicate clicks/requests
+- Test metrics: 12 / 12 Playwright browser E2E tests (100% passing) across Login (7) and Logout (5) running against real Vite frontend, ASP.NET Core API, and PostgreSQL database
 
 ### Architectural Constraints & Limitations
 

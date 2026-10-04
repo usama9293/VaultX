@@ -47,6 +47,7 @@ describe('LoginForm Component (Integration & Security)', () => {
       expect(screen.getByLabelText(/^master password/i)).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /sign in to vaultx/i })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /show master password/i })).toBeInTheDocument()
+      expect(screen.queryByText(/step 5|connected to post|integration complete|future milestone/i)).not.toBeInTheDocument()
     })
 
     it('toggles password visibility between password and text', async () => {
@@ -209,6 +210,7 @@ describe('LoginForm Component (Integration & Security)', () => {
         expect(screen.getByRole('region', { name: /authenticated session/i })).toBeInTheDocument()
       })
       expect(screen.getByText('Session Established')).toBeInTheDocument()
+      expect(screen.queryByText(/step 5|connected to post|integration complete|future milestone/i)).not.toBeInTheDocument()
 
       // Verify in-memory state is authenticated and holds the token
       expect(screen.getByTestId('auth-status')).toHaveTextContent('authenticated')

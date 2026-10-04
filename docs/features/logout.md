@@ -2,7 +2,7 @@
 
 ## 1. Overview & Current Status
 
-**Status: Step 6 — Integration Complete ✅ (Steps 7–10 Pending)**
+**Status: Step 7 — End-to-End Testing Complete ✅ (Steps 8–10 Pending)**
 
 Logout provides secure session termination for authenticated users by revoking the persistent refresh-token session identified by the incoming `refreshToken` cookie and instructing the user agent to clear the cookie.
 
@@ -14,7 +14,7 @@ Logout provides secure session termination for authenticated users by revoking t
 - **Step 4: Backend Implementation** — Complete (`POST /api/auth/logout`, `ILogoutUserHandler`, `LogoutUserHandler`, single-session revocation, HttpOnly cookie deletion, idempotent 204 response, 173 passing backend tests including 22 Logout-specific tests)
 - **Step 5: Frontend Implementation** — Complete (`logoutUser` API client, `AuthContext.logout`, authenticated-view Log Out control, local state cleared even on API failure, memory-only access token preserved, HttpOnly refresh cookie untouched by JavaScript)
 - **Step 6: Integration** — Complete (End-to-end integration verified across frontend state, HTTP contract, cookie deletion, and database session revocation)
-- **Step 7: End-to-End Testing** — Pending
+- **Step 7: End-to-End Testing** — Complete (Verified complete logout user journey in real Chromium browser using Playwright against live Vite dev server, ASP.NET Core API, and PostgreSQL database)
 - **Step 8: Security Testing** — Pending
 - **Step 9: Documentation** — In Progress (this document)
 - **Step 10: Complete** — Pending
@@ -364,15 +364,104 @@ The Step 6 integration verifies that frontend client actions, HTTP cookie transp
 
 ---
 
-## 12. Deferred Work
+## 12. Browser End-to-End Testing (Step 7)
 
-The following items are outside the scope of Step 6 (Integration) and deferred to subsequent lifecycle steps or future roadmap phases:
+### E2E Architecture
 
-1. **Step 7: Browser E2E Testing:** Playwright real-browser logout scenarios.
-2. **Step 8: Dedicated Security Testing:** Penetration testing and security hardening for logout.
-3. **Step 9: Documentation Finalization:** Complete feature documentation after Steps 6–8.
-4. **Step 10: Feature Complete:** Mark Logout complete only after Steps 6–9.
-5. **Token Refresh Endpoint (`POST /api/auth/refresh`):** Replay detection and token rotation.
-6. **Protected Routes:** Phase 2, Section 6.4.
-7. **Global Logout / All-Device Session Revocation:** Phase 2, Section 6.5+ / Session Management.
-8. **JWT Blacklisting:** Explicitly avoided due to stateless architecture.
+Step 7 validates the Logout vertical slice through a real browser and the complete running application stack:
+
+```text
+Playwright (Chromium)
+        ↓
+Vite Dev Server (http://localhost:5173)
+        ↓ (Proxy /api -> http://localhost:5071)
+ASP.NET Core API (http://localhost:5071)
+        ↓
+Application Services & Handlers (LogoutUserHandler)
+        ↓
+Infrastructure Repositories & EF Core
+        ↓
+PostgreSQL Database ("Users", "RefreshTokens")
+```
+
+The test runner interacts with the actual UI DOM via accessible selectors, receives real HTTP responses, checks actual browser cookie jar state via `page.context().cookies()`, and validates JavaScript storage/URL boundaries.
+
+### Test Scenarios & Matrix ([logout.spec.ts](../../e2e/auth/logout.spec.ts))
+
+The browser E2E test suite covers five scenarios:
+
+1. **Complete Browser Logout (`logout.spec.ts:33`):**
+   - Creates a unique test user via real API registration (`createE2EUser`).
+   - Navigates to `/`, submits credentials through the real UI, receives `200 OK` on `POST /api/auth/login`.
+   - Verifies the authenticated session region is displayed with "Session Established".
+   - Clicks "Log Out", captures the real `POST /api/auth/logout` response, and asserts `HTTP 204 No Content`.
+   - Verifies the UI navigates back to "Sign In", the authenticated session region is removed from the DOM, and no raw errors are displayed.
+
+2. **Refresh Cookie Lifecycle (`logout.spec.ts:64`):**
+   - Logs in through the real browser UI and inspects `page.context().cookies()`.
+   - Asserts `refreshToken` cookie exists with a non-empty value, `HttpOnly=true`, `Path=/api/auth`, `SameSite=Lax`, valid positive expiration, and `Secure=false` in local HTTP development.
+   - Evaluates `document.cookie` to confirm `refreshToken` is completely inaccessible from client JavaScript.
+   - Executes real browser logout and asserts `HTTP 204`.
+   - Re-inspects `page.context().cookies()` and verifies `refreshToken` has been completely deleted from the browser cookie jar.
+
+3. **Access Token Storage & URL Boundary (`logout.spec.ts:115`):**
+   - Captures `accessToken` from the real login response.
+   - Validates that `accessToken` is never stored in `localStorage`, `sessionStorage`, URL search parameters, URL hash, or `document.cookie` while authenticated.
+   - Executes real browser logout.
+   - Validates that after logout, `localStorage` and `sessionStorage` remain completely empty (`length === 0`), and URL parameters contain no token data.
+
+4. **Logout Network Failure Resilience (`logout.spec.ts:156`):**
+   - Establishes a real authenticated session.
+   - Intercepts `POST /api/auth/logout` via `page.route` and aborts the request to simulate a network outage.
+   - Clicks "Log Out".
+   - Confirms that the frontend contract (`AuthContext.logout` `finally` block) clears in-memory auth state, causing the UI to return to "Sign In" and removing the authenticated session region.
+   - Confirms that no raw exceptions, stack traces (`TypeError`, `Failed to fetch`), or tokens are exposed to the user.
+   - Confirms that tokens are not leaked into persistent browser storage on failure.
+
+5. **Loading State & Duplicate Request Prevention (`logout.spec.ts:194`):**
+   - Establishes a real authenticated session.
+   - Intercepts `POST /api/auth/logout` and defers fulfillment using a pending Promise.
+   - Clicks "Log Out" and immediately asserts the button transitions to "Signing Out...", is `disabled`, and has `aria-busy="true"`.
+   - Attempts additional clicks while the request is in flight.
+   - Fulfills the intercepted route and verifies the UI returns to "Sign In".
+   - Asserts that exactly one `POST /api/auth/logout` network request was issued throughout the interaction.
+
+### Test Results
+
+- **Command:** `npm run test:e2e` (from `frontend/`)
+- **Framework:** Playwright v1.63.0 (Chromium, 1 worker, fullyParallel: false)
+- **Suite Results:**
+  - `login.spec.ts`: 7 passed
+  - `logout.spec.ts`: 5 passed
+  - **Total E2E Tests:** **12 passed (100%)**
+  - Execution duration: **10.2s**
+
+### Step 7 Acceptance Criteria & Results
+
+| Criterion | Requirement | Result | Evidence |
+| :--- | :--- | :---: | :--- |
+| **AC-7.1: Real Browser Journey** | Real browser registers, logs in, and logs out through actual UI | **PASS** | `logout.spec.ts` (Test 1) |
+| **AC-7.2: Real API Logout** | `POST /api/auth/logout` is issued by browser and returns HTTP 204 | **PASS** | `logout.spec.ts` (Test 1) |
+| **AC-7.3: UI State Transition** | UI transitions from authenticated session back to Sign In | **PASS** | `logout.spec.ts` (Test 1) |
+| **AC-7.4: Cookie Jar Deletion** | `refreshToken` exists after login and is deleted after logout | **PASS** | `logout.spec.ts` (Test 2) |
+| **AC-7.5: Cookie Inaccessibility** | `refreshToken` cannot be read via `document.cookie` | **PASS** | `logout.spec.ts` (Test 2) |
+| **AC-7.6: Storage & URL Isolation** | Access token never present in storage, URLs, or cookies | **PASS** | `logout.spec.ts` (Test 3) |
+| **AC-7.7: Network Failure Safety** | Network failure clears local state and returns UI to Sign In | **PASS** | `logout.spec.ts` (Test 4) |
+| **AC-7.8: Duplicate Prevention** | Loading state disables button and prevents duplicate requests | **PASS** | `logout.spec.ts` (Test 5) |
+| **AC-7.9: Regression Integrity** | Existing tests (login E2E, frontend unit/integration, backend) pass | **PASS** | All suites passing (180 backend, 87 frontend, 12 E2E) |
+| **AC-7.10: Security Boundary** | No Step 8 adversarial security tests implemented | **PASS** | Scope strictly maintained |
+| **AC-7.11: Documentation** | Documentation accurately marks Step 7 complete, Steps 8–10 pending | **PASS** | `docs/features/logout.md` & Roadmap updated |
+
+---
+
+## 13. Deferred Work
+
+The following items are outside the scope of Step 7 (Browser E2E Testing) and deferred to subsequent lifecycle steps or future roadmap phases:
+
+1. **Step 8: Dedicated Security Testing:** Penetration testing and security hardening for logout.
+2. **Step 9: Documentation Finalization:** Complete feature documentation after Step 8.
+3. **Step 10: Feature Complete:** Mark Logout complete only after Steps 8–9.
+4. **Token Refresh Endpoint (`POST /api/auth/refresh`):** Replay detection and token rotation.
+5. **Protected Routes:** Phase 2, Section 6.4.
+6. **Global Logout / All-Device Session Revocation:** Phase 2, Section 6.5+ / Session Management.
+7. **JWT Blacklisting:** Explicitly avoided due to stateless architecture.

@@ -17,6 +17,8 @@ describe('RegisterForm Component (Integration)', () => {
   it('1. renders all registration form fields and accessible labels', () => {
     render(<RegisterForm />)
 
+    expect(screen.queryByText(/step 6e|connected to post|integration complete|future milestone/i)).not.toBeInTheDocument()
+
     expect(screen.getByRole('heading', { name: /create account/i })).toBeInTheDocument()
     expect(screen.getByLabelText(/email address/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^master password/i)).toBeInTheDocument()
@@ -78,6 +80,7 @@ describe('RegisterForm Component (Integration)', () => {
       expect(screen.getByRole('heading', { name: /registration successful/i })).toBeInTheDocument()
       expect(screen.getByText(/newuser@example.com/i)).toBeInTheDocument()
     })
+    expect(screen.queryByText(/step 6e|connected to post|integration complete|future milestone/i)).not.toBeInTheDocument()
 
     // 4. No password is displayed after successful registration
     expect(screen.queryByText('StrongP@ssw0rd!123')).toBeNull()
