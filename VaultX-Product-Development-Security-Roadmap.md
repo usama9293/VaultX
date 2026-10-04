@@ -481,20 +481,20 @@ Authenticated Frontend
 
 ## 6.3 Logout
 
-**Status: Step 7 — End-to-End Testing Complete ✅ (Steps 8–10 Pending)**
+**Status: Step 10 — Complete ✅ (Steps 1–10 Complete)**
 
 ### Vertical Slice Lifecycle Summary
 
 - **Step 1: Requirement** — Complete (Single-session revocation, idempotent logout, cookie clearing, stateless JWT lifetime boundary)
 - **Step 2: Design** — Complete (API contract: `POST /api/auth/logout`, cookie-based session identification, HTTP 204 No Content response)
 - **Step 3: Security Analysis** — Complete (Threat modeling: session isolation, token oracle defense, sensitive data exposure defense, CSRF boundary)
-- **Step 4: Backend Implementation** — Complete (`POST /api/auth/logout`, `ILogoutUserHandler`, `LogoutUserHandler`, single-session revocation, HttpOnly cookie deletion, idempotent 204 response, 173 total passing backend tests including 22 Logout-specific tests)
+- **Step 4: Backend Implementation** — Complete (`POST /api/auth/logout`, `ILogoutUserHandler`, `LogoutUserHandler`, single-session revocation, HttpOnly cookie deletion, idempotent 204 response)
 - **Step 5: Frontend Implementation** — Complete (`logoutUser` API client, `AuthContext.logout`, authenticated Log Out control, local auth cleared even on API failure, memory-only access token, HttpOnly refresh cookie untouched by JS)
 - **Step 6: Integration** — Complete (Verified end-to-end integration flow from React UI through API to DB, cookie deletion contract, environment-aware secure policy, and in-memory auth state clearing)
 - **Step 7: End-to-End Testing** — Complete (Verified in real Chromium browser using Playwright: complete user journey, cookie lifecycle, storage/URL boundary, network failure resilience, and loading/duplicate prevention; 12/12 passing E2E tests)
-- **Step 8: Security Testing** — Pending
-- **Step 9: Documentation** — In Progress (`docs/features/logout.md` updated for Steps 4–7)
-- **Step 10: Complete** — Pending
+- **Step 8: Security Testing** — Complete (32/32 Logout-filtered security/integration test cases passed; attack surface and results documented in `docs/features/logout.md`)
+- **Step 9: Documentation** — Complete (`docs/features/logout.md` records Step 8 coverage, results, deferred features, and limitations)
+- **Step 10: Complete** — Complete (Logout lifecycle acceptance criteria and final verification passed)
 
 ### Backend Implementation Summary
 
@@ -533,7 +533,7 @@ Verified:
 - Data preservation: Target user, password hash, and unrelated user records & sessions are preserved intact across logout; session records are updated, not deleted.
 - Cookie deletion contract & environment-awareness: Cookie deletion header specifies `refreshToken`, `Path=/api/auth`, `HttpOnly=true`, `SameSite=Lax`, expiration (`max-age=0` / `expires=1970`), with `Secure` flag dynamically adapting based on HTTPS / environment context.
 - Frontend application integration: React application tree transitions from authenticated state to Sign In form, wipes in-memory access token and expiration from `AuthContext`, leaves zero trace in `localStorage`, `sessionStorage`, or URL, safely handles network failures without raw error leakage, and prevents duplicate submissions while request is in flight.
-- Test metrics: 180 total backend tests (100% passing, including 20 Logout tests) + 87 total frontend tests (100% passing, including 4 Logout integration tests).
+- Test metrics: 192 total backend tests (100% passing; 32 Logout-filtered security/integration test cases passed) + 87 total frontend tests (100% passing, including 4 Logout integration tests).
 
 ### End-to-End Testing Summary (Step 7)
 
@@ -548,11 +548,21 @@ Verified in Real Browser:
 - Loading and duplicate prevention: pending logout request displays "Signing Out...", disables the button, sets `aria-busy="true"`, and suppresses duplicate clicks/requests
 - Test metrics: 12 / 12 Playwright browser E2E tests (100% passing) across Login (7) and Logout (5) running against real Vite frontend, ASP.NET Core API, and PostgreSQL database
 
+### Security Testing Summary (Step 8)
+
+Dedicated Logout security testing was completed. Tests verified cookie-only refresh-token selection against JSON body, query-string, Authorization-header, and security-sensitive body-field injection; concurrent-session isolation; cross-user impersonation attempts; tampered-token handling; response/error disclosure boundaries; sensitive logging checks; unsupported HTTP methods; refresh-cookie security and deletion behavior; and frontend authentication-state/storage boundaries.
+
+- No vulnerabilities were identified within the tested Logout attack surface. This finding is limited to the tested surface and is not a universal security claim.
+- Test results: **32/32 Logout-filtered security/integration tests**, **192/192 full backend tests** (114 integration, 78 unit), **87/87 frontend tests**, and **12/12 Playwright E2E tests** passed.
+- Frontend lint, frontend production build, and `git diff --check` passed.
+- Sensitive-log assertions cover the exercised valid, unknown/tampered, malformed, and expired paths for raw token and cookie-form values; they are not a general audit of every log field, derived hash, or logging level.
+
 ### Architectural Constraints & Limitations
 
-- **Stateless JWT Access Token Limitation:** Access tokens are short-lived, stateless JWTs and are not blacklisted on logout. An access token remains cryptographically valid until its expiration (approximately 15 minutes). Logout immediately invalidates the persistent refresh-token session.
+- **Stateless JWT Access Token Limitation:** Logout revokes the refresh session and clears client authentication state, but does not immediately invalidate an already-issued stateless access JWT. The access token remains cryptographically valid until its expiration (approximately 15 minutes).
 - **Multiple Session Isolation:** Only the session matching the provided `refreshToken` cookie is revoked. Other active sessions belonging to the user remain active. Global logout is deferred to future session management work.
 - **Local vs Server Logout:** Frontend always clears local auth state after logout is initiated. A failed logout API request does not leave the UI authenticated, and does not claim that the server session was successfully revoked.
+- **Deferred Features:** Refresh-token rotation/replay detection, global/all-device logout, and JWT blacklisting are not implemented as part of Logout Step 8.
 
 ---
 

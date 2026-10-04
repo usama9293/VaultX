@@ -2,7 +2,7 @@
 
 ## 1. Overview & Current Status
 
-**Status: Step 7 — End-to-End Testing Complete ✅ (Steps 8–10 Pending)**
+**Status: Step 10 — Complete ✅ (Steps 1–10 Complete)**
 
 Logout provides secure session termination for authenticated users by revoking the persistent refresh-token session identified by the incoming `refreshToken` cookie and instructing the user agent to clear the cookie.
 
@@ -11,13 +11,13 @@ Logout provides secure session termination for authenticated users by revoking t
 - **Step 1: Requirement** — Complete (Single-session revocation, idempotent logout, cookie clearing, stateless JWT lifetime boundary)
 - **Step 2: Design** — Complete (API contract: `POST /api/auth/logout`, cookie-based session identification, HTTP 204 No Content response)
 - **Step 3: Security Analysis** — Complete (Threat modeling: session isolation, token oracle defense, sensitive data exposure defense, CSRF boundary)
-- **Step 4: Backend Implementation** — Complete (`POST /api/auth/logout`, `ILogoutUserHandler`, `LogoutUserHandler`, single-session revocation, HttpOnly cookie deletion, idempotent 204 response, 173 passing backend tests including 22 Logout-specific tests)
+- **Step 4: Backend Implementation** — Complete (`POST /api/auth/logout`, `ILogoutUserHandler`, `LogoutUserHandler`, single-session revocation, HttpOnly cookie deletion, idempotent 204 response)
 - **Step 5: Frontend Implementation** — Complete (`logoutUser` API client, `AuthContext.logout`, authenticated-view Log Out control, local state cleared even on API failure, memory-only access token preserved, HttpOnly refresh cookie untouched by JavaScript)
 - **Step 6: Integration** — Complete (End-to-end integration verified across frontend state, HTTP contract, cookie deletion, and database session revocation)
 - **Step 7: End-to-End Testing** — Complete (Verified complete logout user journey in real Chromium browser using Playwright against live Vite dev server, ASP.NET Core API, and PostgreSQL database)
-- **Step 8: Security Testing** — Pending
-- **Step 9: Documentation** — In Progress (this document)
-- **Step 10: Complete** — Pending
+- **Step 8: Security Testing** — Complete (32/32 Logout-filtered security/integration test cases passed; see Section 13)
+- **Step 9: Documentation** — Complete (this document records Step 8 scope, results, limitations, and deferred work)
+- **Step 10: Complete** — Complete (Logout lifecycle acceptance criteria and final verification passed)
 
 ---
 
@@ -142,7 +142,7 @@ VaultX supports multiple concurrent sessions per user account (e.g., desktop bro
 1. **HttpOnly Cookie Defense:** Raw refresh tokens cannot be accessed, read, or deleted via client-side JavaScript.
 2. **Hashed Persistence:** Raw refresh tokens are never persisted in the database; only SHA-256 hashes are stored.
 3. **No Sensitive Data Disclosure:** Logout responses contain zero response bytes, preventing leakage of tokens, hashes, passwords, or user metadata.
-4. **No Sensitive Logging:** Raw refresh tokens and hashes are excluded from application logging.
+4. **Sensitive Logging Checks:** Step 8 captured logs for exercised logout paths and checked that raw refresh-token values and cookie-form values were absent; the test does not assert every log field or perform a comprehensive hash/log-level audit.
 5. **HTTP Method Restriction:** Only `POST` is accepted; `GET`, `PUT`, `PATCH`, and `DELETE` return `405 Method Not Allowed`.
 6. **Centralized Error Sanitization:** Unexpected database or runtime exceptions are intercepted by `ExceptionHandlingMiddleware` and return RFC 9110 ProblemDetails (`500 Internal Server Error`) without disclosing stack traces, database drivers, or connection details.
 
@@ -159,7 +159,7 @@ VaultX supports multiple concurrent sessions per user account (e.g., desktop bro
 - `HandleAsync_ExpiredToken_DoesNotRevokeOrSave`
 - `HandleAsync_MalformedTokenCausingArgumentException_DoesNotThrowAndDoesNotSave`
 
-### Integration Tests ([AuthControllerLogoutIntegrationTests.cs](../../tests/PasswordManager.IntegrationTests/Controllers/AuthControllerLogoutIntegrationTests.cs)) — 13 Tests
+### Integration Tests ([AuthControllerLogoutIntegrationTests.cs](../../tests/PasswordManager.IntegrationTests/Controllers/AuthControllerLogoutIntegrationTests.cs))
 - `Logout_ValidSession_Returns204AndRevokesTokenInDatabase`
 - `Logout_InstructsBrowserToDeleteRefreshTokenCookie`
 - `Logout_MissingCookie_Returns204NoContentWithoutModifyingDatabase`
@@ -173,9 +173,8 @@ VaultX supports multiple concurrent sessions per user account (e.g., desktop bro
 
 ### Suite Results
 - **Unit Tests:** 78 / 78 passed (100%)
-- **Integration Tests:** 95 / 95 passed (100%)
-- **Total Backend Tests:** **173 / 173 passed (100%)**
-- **Compiler Warnings:** 0 warnings, 0 errors
+- **Integration Tests:** 114 / 114 passed (100%)
+- **Total Backend Tests:** **192 / 192 passed (100%)**
 
 ---
 
@@ -448,20 +447,58 @@ The browser E2E test suite covers five scenarios:
 | **AC-7.6: Storage & URL Isolation** | Access token never present in storage, URLs, or cookies | **PASS** | `logout.spec.ts` (Test 3) |
 | **AC-7.7: Network Failure Safety** | Network failure clears local state and returns UI to Sign In | **PASS** | `logout.spec.ts` (Test 4) |
 | **AC-7.8: Duplicate Prevention** | Loading state disables button and prevents duplicate requests | **PASS** | `logout.spec.ts` (Test 5) |
-| **AC-7.9: Regression Integrity** | Existing tests (login E2E, frontend unit/integration, backend) pass | **PASS** | All suites passing (180 backend, 87 frontend, 12 E2E) |
-| **AC-7.10: Security Boundary** | No Step 8 adversarial security tests implemented | **PASS** | Scope strictly maintained |
-| **AC-7.11: Documentation** | Documentation accurately marks Step 7 complete, Steps 8–10 pending | **PASS** | `docs/features/logout.md` & Roadmap updated |
+| **AC-7.9: Regression Integrity** | Existing tests (login E2E, frontend unit/integration, backend) pass | **PASS** | Full suites: 192 backend, 87 frontend, 12 E2E |
+| **AC-7.10: Security Boundary** | Step 7 browser coverage remains distinct from dedicated Step 8 security tests | **PASS** | Step 8 results recorded in Section 13 |
+| **AC-7.11: Documentation** | Step 7 remains complete and subsequent lifecycle steps are accurately recorded | **PASS** | This document and the roadmap |
 
 ---
 
-## 13. Deferred Work
+## 13. Security Testing (Step 8)
 
-The following items are outside the scope of Step 7 (Browser E2E Testing) and deferred to subsequent lifecycle steps or future roadmap phases:
+Dedicated Logout security testing was completed after Step 7. The existing logout implementation and security tests were reviewed and exercised without changing production behavior.
 
-1. **Step 8: Dedicated Security Testing:** Penetration testing and security hardening for logout.
-2. **Step 9: Documentation Finalization:** Complete feature documentation after Step 8.
-3. **Step 10: Feature Complete:** Mark Logout complete only after Steps 8–9.
-4. **Token Refresh Endpoint (`POST /api/auth/refresh`):** Replay detection and token rotation.
-5. **Protected Routes:** Phase 2, Section 6.4.
-6. **Global Logout / All-Device Session Revocation:** Phase 2, Section 6.5+ / Session Management.
-7. **JWT Blacklisting:** Explicitly avoided due to stateless architecture.
+### Security Properties Verified by Tests
+
+The test coverage exercised:
+
+- Cookie-only refresh-token selection, including attempts to override the selected session through a JSON body, query string, Authorization header, and security-sensitive body fields such as `userId`, `refreshTokenId`, `tokenHash`, `revokedAt`, `expiresAt`, `replacedByTokenId`, and `sessionId`.
+- Session isolation: logging out one of a user's concurrent sessions leaves the other active.
+- Cross-user impersonation attempts: client-supplied identity/session fields do not select another user's session.
+- Unknown and tampered cookie values, including random values, trailing or only whitespace, empty values, long values, and a value with an appended segment; the genuine unrelated session remains active.
+- Non-disclosive logout responses and sanitized unexpected-error responses.
+- Sensitive logging checks that capture the exercised valid, unknown/tampered, malformed, and expired paths and assert that their raw refresh-token values and cookie-form values are absent. These assertions do not constitute a general audit of every log field or logging level.
+- Unsupported `GET`, `PUT`, `PATCH`, and `DELETE` methods returning `405 Method Not Allowed`.
+- Refresh-cookie lifecycle behavior: HttpOnly, `/api/auth` path, `SameSite=Lax`, `Secure=false` in local HTTP development, and deletion on logout. The production Secure policy was not exercised in this verification. E2E coverage also confirms the refresh cookie is unavailable to JavaScript.
+- Frontend logout cleanup of in-memory authentication state, with no access token left in persistent browser storage or URL.
+
+**No vulnerabilities were identified within the tested Logout attack surface.** This is limited to the stated implementation and test coverage; it is not a claim that VaultX is universally secure or immune to attacks.
+
+### Verified Results
+
+| Verification | Result |
+| :--- | :---: |
+| Logout-filtered security/integration tests | **32 / 32 passed** |
+| Full backend suite | **192 / 192 passed** (114 integration, 78 unit) |
+| Frontend tests | **87 / 87 passed** |
+| Playwright E2E suite | **12 / 12 passed** |
+| Frontend lint | **PASS** |
+| Frontend production build | **PASS** |
+| `git diff --check` | **PASS** |
+
+### Deferred Features and Known Limitations
+
+- **Stateless JWT limitation:** Logout revokes the refresh session and clears client authentication state, but does not immediately invalidate an already-issued stateless access JWT. The JWT remains cryptographically valid until expiration.
+- **Session scope:** Logout revokes only the session identified by its refresh-token cookie. Global/all-device logout is deferred to future session-management work.
+- **Refresh-token rotation/replay detection:** Not implemented as part of Logout Step 8; deferred to the refresh/session-management roadmap work.
+- **JWT blacklisting:** Not implemented; this remains intentionally outside Logout's stateless access-token design.
+
+---
+
+## 14. Deferred Work
+
+The following work remains outside the completed Logout lifecycle steps:
+
+1. **Step 10: Feature Complete:** Complete (Logout lifecycle acceptance verified).
+2. **Token Refresh Endpoint (`POST /api/auth/refresh`):** Replay detection and token rotation.
+3. **Protected Routes:** Phase 2, Section 6.4.
+4. **Global Logout / All-Device Session Revocation:** Phase 2, Section 6.5+ / Session Management.

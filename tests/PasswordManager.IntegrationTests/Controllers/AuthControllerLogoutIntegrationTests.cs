@@ -1,8 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using PasswordManager.Application.DTOs.Authentication;
 using PasswordManager.Application.Interfaces.Authentication;
 using PasswordManager.Domain.Entities;
@@ -41,6 +43,17 @@ public class AuthControllerLogoutIntegrationTests : IClassFixture<CustomWebAppli
         var setCookie = response.Headers.GetValues("Set-Cookie").First(c => c.StartsWith("refreshToken="));
         var rawToken = setCookie.Split(';')[0]["refreshToken=".Length..];
         return rawToken;
+    }
+
+    private static async Task<RefreshToken?> GetRefreshTokenFromDatabaseAsync(
+        CustomWebApplicationFactory factory,
+        string rawRefreshToken)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var tokenService = scope.ServiceProvider.GetRequiredService<ITokenService>();
+        var tokenHash = tokenService.HashRefreshToken(rawRefreshToken);
+        return await db.RefreshTokens.FirstOrDefaultAsync(rt => rt.TokenHash == tokenHash);
     }
 
     [Fact]
@@ -323,6 +336,284 @@ public class AuthControllerLogoutIntegrationTests : IClassFixture<CustomWebAppli
     }
 
     [Fact]
+    public async Task Logout_JsonBodyRefreshTokenCannotOverrideCookieSelectedSession()
+    {
+        const string email = "logout.body.override@vaultx.local";
+        const string password = "VaultX@SecurePass2026!";
+        await RegisterUserAsync(email, password);
+
+        var tokenA = await LoginAndGetRefreshTokenAsync(email, password);
+        var tokenB = await LoginAndGetRefreshTokenAsync(email, password);
+
+        Assert.NotEqual(tokenA, tokenB);
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout");
+        request.Headers.Add("Cookie", $"refreshToken={tokenA}");
+        request.Content = JsonContent.Create(new { refreshToken = tokenB });
+
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        var tokenARecord = await GetRefreshTokenFromDatabaseAsync(_factory, tokenA);
+        var tokenBRecord = await GetRefreshTokenFromDatabaseAsync(_factory, tokenB);
+
+        Assert.NotNull(tokenARecord);
+        Assert.NotNull(tokenBRecord);
+        Assert.True(tokenARecord.IsRevoked);
+        Assert.False(tokenBRecord.IsRevoked);
+        Assert.True(tokenBRecord.IsActive);
+    }
+
+    [Fact]
+    public async Task Logout_QueryStringRefreshTokenCannotOverrideCookieSelectedSession()
+    {
+        const string email = "logout.query.override@vaultx.local";
+        const string password = "VaultX@SecurePass2026!";
+        await RegisterUserAsync(email, password);
+
+        var tokenA = await LoginAndGetRefreshTokenAsync(email, password);
+        var tokenB = await LoginAndGetRefreshTokenAsync(email, password);
+
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/auth/logout?refreshToken={Uri.EscapeDataString(tokenB)}");
+        request.Headers.Add("Cookie", $"refreshToken={tokenA}");
+
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        var tokenARecord = await GetRefreshTokenFromDatabaseAsync(_factory, tokenA);
+        var tokenBRecord = await GetRefreshTokenFromDatabaseAsync(_factory, tokenB);
+
+        Assert.NotNull(tokenARecord);
+        Assert.NotNull(tokenBRecord);
+        Assert.True(tokenARecord.IsRevoked);
+        Assert.False(tokenBRecord.IsRevoked);
+        Assert.True(tokenBRecord.IsActive);
+    }
+
+    [Fact]
+    public async Task Logout_AuthorizationHeaderRefreshTokenCannotOverrideCookieSelectedSession()
+    {
+        const string email = "logout.header.override@vaultx.local";
+        const string password = "VaultX@SecurePass2026!";
+        await RegisterUserAsync(email, password);
+
+        var tokenA = await LoginAndGetRefreshTokenAsync(email, password);
+        var tokenB = await LoginAndGetRefreshTokenAsync(email, password);
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout");
+        request.Headers.Add("Cookie", $"refreshToken={tokenA}");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tokenB);
+
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        var tokenARecord = await GetRefreshTokenFromDatabaseAsync(_factory, tokenA);
+        var tokenBRecord = await GetRefreshTokenFromDatabaseAsync(_factory, tokenB);
+
+        Assert.NotNull(tokenARecord);
+        Assert.NotNull(tokenBRecord);
+        Assert.True(tokenARecord.IsRevoked);
+        Assert.False(tokenBRecord.IsRevoked);
+        Assert.True(tokenBRecord.IsActive);
+    }
+
+    [Fact]
+    public async Task Logout_RequestBodySecurityFieldsCannotOverrideSessionSelection()
+    {
+        const string email = "logout.body.fields@vaultx.local";
+        const string password = "VaultX@SecurePass2026!";
+        await RegisterUserAsync(email, password);
+
+        var tokenA = await LoginAndGetRefreshTokenAsync(email, password);
+        var tokenB = await LoginAndGetRefreshTokenAsync(email, password);
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout");
+        request.Headers.Add("Cookie", $"refreshToken={tokenA}");
+
+        var payload = new
+        {
+            refreshToken = tokenB,
+            userId = Guid.NewGuid(),
+            refreshTokenId = Guid.NewGuid(),
+            tokenHash = "attacker-controlled-hash",
+            revokedAt = DateTime.UtcNow,
+            expiresAt = DateTime.UtcNow.AddDays(30),
+            replacedByTokenId = Guid.NewGuid(),
+            sessionId = Guid.NewGuid()
+        };
+
+        request.Content = JsonContent.Create(payload);
+
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        var tokenARecord = await GetRefreshTokenFromDatabaseAsync(_factory, tokenA);
+        var tokenBRecord = await GetRefreshTokenFromDatabaseAsync(_factory, tokenB);
+
+        Assert.NotNull(tokenARecord);
+        Assert.NotNull(tokenBRecord);
+        Assert.True(tokenARecord.IsRevoked);
+        Assert.False(tokenBRecord.IsRevoked);
+        Assert.True(tokenBRecord.IsActive);
+    }
+
+    [Fact]
+    public async Task Logout_CrossUserImpersonationAttemptCannotRevokeAnotherUsersSession()
+    {
+        const string userAEmail = "logout.crossuser.a@vaultx.local";
+        const string userBEmail = "logout.crossuser.b@vaultx.local";
+        const string password = "VaultX@SecurePass2026!";
+
+        await RegisterUserAsync(userAEmail, password);
+        await RegisterUserAsync(userBEmail, password);
+
+        var tokenA = await LoginAndGetRefreshTokenAsync(userAEmail, password);
+        var tokenB = await LoginAndGetRefreshTokenAsync(userBEmail, password);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var userA = await db.Users.FirstAsync(u => u.Email == userAEmail);
+            var userB = await db.Users.FirstAsync(u => u.Email == userBEmail);
+
+            Assert.NotEqual(userA.Id, userB.Id);
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout");
+        request.Headers.Add("Cookie", $"refreshToken={tokenA}");
+        request.Content = JsonContent.Create(new
+        {
+            userId = Guid.NewGuid(),
+            sessionId = Guid.NewGuid(),
+            refreshTokenId = Guid.NewGuid(),
+            refreshToken = tokenB
+        });
+
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        var tokenARecord = await GetRefreshTokenFromDatabaseAsync(_factory, tokenA);
+        var tokenBRecord = await GetRefreshTokenFromDatabaseAsync(_factory, tokenB);
+
+        Assert.NotNull(tokenARecord);
+        Assert.NotNull(tokenBRecord);
+        Assert.True(tokenARecord.IsRevoked);
+        Assert.False(tokenBRecord.IsRevoked);
+        Assert.True(tokenBRecord.IsActive);
+    }
+
+    [Theory]
+    [InlineData("tampered-token")]
+    [InlineData("token-with-trailing-space ")]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("very-long-token-abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz")]
+    [InlineData("token-with-extra-segment-append-me")]
+    public async Task Logout_TamperedCookieMatrix_Returns204AndDoesNotRevokeUnrelatedSessions(string tamperedToken)
+    {
+        const string email = "logout.tampered.matrix@vaultx.local";
+        const string password = "VaultX@SecurePass2026!";
+        await RegisterUserAsync(email, password);
+
+        var validToken = await LoginAndGetRefreshTokenAsync(email, password);
+        var validTokenRecord = await GetRefreshTokenFromDatabaseAsync(_factory, validToken);
+        Assert.NotNull(validTokenRecord);
+        Assert.True(validTokenRecord.IsActive);
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout");
+        request.Headers.Add("Cookie", $"refreshToken={tamperedToken}");
+
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        var refreshedRecord = await GetRefreshTokenFromDatabaseAsync(_factory, validToken);
+        Assert.NotNull(refreshedRecord);
+        Assert.True(refreshedRecord.IsActive);
+        Assert.Null(refreshedRecord.RevokedAt);
+    }
+
+    [Fact]
+    public async Task Logout_SensitiveLoggingDoesNotExposeRefreshTokensOrHashes()
+    {
+        var logSink = new CapturingLoggerProvider();
+        var client = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureLogging(logging =>
+            {
+                logging.ClearProviders();
+                logging.AddProvider(logSink);
+                logging.SetMinimumLevel(LogLevel.Information);
+            });
+        }).CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
+        {
+            HandleCookies = false
+        });
+
+        const string email = "logout.log.sanitization@vaultx.local";
+        const string password = "VaultX@SecurePass2026!";
+        await RegisterUserAsync(email, password);
+
+        var validToken = await LoginAndGetRefreshTokenAsync(email, password);
+        var tamperedToken = "tampered-token-logger-case";
+        var expiredToken = "expired-token-logger-case";
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var tokenService = scope.ServiceProvider.GetRequiredService<ITokenService>();
+            var user = await db.Users.FirstAsync(u => u.Email == email);
+
+            var expiredSession = new RefreshToken(user.Id, tokenService.HashRefreshToken(expiredToken), DateTime.UtcNow.AddMinutes(5));
+            await db.RefreshTokens.AddAsync(expiredSession);
+            await db.SaveChangesAsync();
+
+            expiredSession = await db.RefreshTokens.FirstAsync(rt => rt.TokenHash == tokenService.HashRefreshToken(expiredToken));
+            typeof(RefreshToken).GetProperty(nameof(RefreshToken.ExpiresAt))!
+                .SetValue(expiredSession, DateTime.UtcNow.AddDays(-1));
+            await db.SaveChangesAsync();
+        }
+
+        var validRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout");
+        validRequest.Headers.Add("Cookie", $"refreshToken={validToken}");
+        await client.SendAsync(validRequest);
+
+        var tamperedRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout");
+        tamperedRequest.Headers.Add("Cookie", $"refreshToken={tamperedToken}");
+        await client.SendAsync(tamperedRequest);
+
+        var malformedRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout");
+        malformedRequest.Headers.Add("Cookie", "refreshToken=");
+        await client.SendAsync(malformedRequest);
+
+        var expiredRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout");
+        expiredRequest.Headers.Add("Cookie", $"refreshToken={expiredToken}");
+        await client.SendAsync(expiredRequest);
+
+        var logText = string.Join(Environment.NewLine, logSink.Messages);
+        Assert.DoesNotContain(validToken, logText);
+        Assert.DoesNotContain(tamperedToken, logText);
+        Assert.DoesNotContain(expiredToken, logText);
+        Assert.DoesNotContain($"refreshToken={validToken}", logText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain($"refreshToken={tamperedToken}", logText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain($"refreshToken={expiredToken}", logText, StringComparison.OrdinalIgnoreCase);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var tokenService = scope.ServiceProvider.GetRequiredService<ITokenService>();
+            var validHash = tokenService.HashRefreshToken(validToken);
+            var tokenRecord = await db.RefreshTokens.FirstAsync(rt => rt.TokenHash == validHash);
+            Assert.True(tokenRecord.IsRevoked);
+        }
+    }
+
+    [Fact]
     public async Task Logout_Response_NeverExposesSensitiveData()
     {
         // Arrange
@@ -400,6 +691,41 @@ public class AuthControllerLogoutIntegrationTests : IClassFixture<CustomWebAppli
         Assert.DoesNotContain("InvalidOperationException", body);
     }
 
+
+    private sealed class CapturingLoggerProvider : ILoggerProvider
+    {
+        public List<string> Messages { get; } = new();
+
+        public ILogger CreateLogger(string categoryName)
+        {
+            return new CapturingLogger(this);
+        }
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class CapturingLogger(CapturingLoggerProvider provider) : ILogger
+        {
+            public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            {
+                provider.Messages.Add(formatter(state, exception));
+            }
+        }
+
+        private sealed class NullScope : IDisposable
+        {
+            public static readonly NullScope Instance = new();
+
+            public void Dispose()
+            {
+            }
+        }
+    }
     private sealed class ThrowingLogoutHandler : PasswordManager.Application.Features.Authentication.Logout.ILogoutUserHandler
     {
         public Task HandleAsync(PasswordManager.Application.Features.Authentication.Logout.LogoutCommand command, CancellationToken cancellationToken = default)
