@@ -37,6 +37,11 @@ public class ExceptionHandlingMiddleware
             _logger.LogWarning("Authentication failure: {Message}", ex.Message);
             await HandleInvalidCredentialsExceptionAsync(context, ex);
         }
+        catch (InvalidCurrentUserIdentityException)
+        {
+            _logger.LogWarning("Rejected request with an invalid authenticated identity.");
+            await HandleInvalidCurrentUserIdentityExceptionAsync(context);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "An unhandled error occurred during request execution.");
@@ -54,6 +59,23 @@ public class ExceptionHandlingMiddleware
             Status = StatusCodes.Status401Unauthorized,
             Title = "Unauthorized",
             Detail = ex.Message,
+            Type = "https://tools.ietf.org/html/rfc9110#section-15.5.2"
+        };
+
+        var json = JsonSerializer.Serialize(problemDetails);
+        await context.Response.WriteAsync(json);
+    }
+
+    private static async Task HandleInvalidCurrentUserIdentityExceptionAsync(HttpContext context)
+    {
+        context.Response.ContentType = MediaTypeNames.Application.Json;
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+
+        var problemDetails = new ProblemDetails
+        {
+            Status = StatusCodes.Status401Unauthorized,
+            Title = "Unauthorized",
+            Detail = "Invalid authentication identity.",
             Type = "https://tools.ietf.org/html/rfc9110#section-15.5.2"
         };
 

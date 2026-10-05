@@ -2,8 +2,10 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using PasswordManager.API.Middleware;
+using PasswordManager.API.Services;
 using PasswordManager.Application;
 using PasswordManager.Application.Common.Security;
+using PasswordManager.Application.Interfaces.Authentication;
 using PasswordManager.Infrastructure;
 
 namespace PasswordManager.API;
@@ -17,6 +19,8 @@ public class Program
         builder.Services.AddApplication();
         builder.Services.AddInfrastructure(builder.Configuration);
         builder.Services.AddControllers();
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 
         var jwtSection = builder.Configuration.GetSection(JwtSettings.SectionName);
         var jwtSettings = jwtSection.Get<JwtSettings>() ?? new JwtSettings();
