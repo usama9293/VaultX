@@ -15,6 +15,9 @@ public class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
         builder.Property(x => x.UserId)
             .IsRequired();
 
+        builder.Property(x => x.FamilyId)
+            .IsRequired();
+
         builder.Property(x => x.TokenHash)
             .IsRequired()
             .HasMaxLength(128);
@@ -23,6 +26,7 @@ public class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
             .IsUnique();
 
         builder.HasIndex(x => x.UserId);
+        builder.HasIndex(x => x.FamilyId);
 
         builder.Property(x => x.ExpiresAt)
             .IsRequired();

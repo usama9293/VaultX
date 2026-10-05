@@ -16,6 +16,22 @@ permissions:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    env:
+      VAULTX_POSTGRES_TEST_CONNECTION_STRING: Host=localhost;Port=5432;Database=vaultx_tests;Username=postgres;Password=vaultx_test_password
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: vaultx_tests
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: vaultx_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d vaultx_tests"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout repository

@@ -60,6 +60,7 @@ Session & Token Generation
 Persistence & Response
   │
   ├─ RefreshToken entity instantiated with (UserId, tokenHash, expiresAt)
+  │    - A new FamilyId identifies this login's independent refresh-token session
   ├─ Persisted to PostgreSQL RefreshTokens table via IRefreshTokenRepository and IUnitOfWork
   │    - Previous active sessions for the user remain valid (multiple concurrent devices supported)
   │
@@ -175,6 +176,7 @@ _Note: Identical response is returned whether the email does not exist or the pa
   RefreshToken
   ├── Id (Guid, PK)
   ├── UserId (Guid, FK -> Users.Id)
+  ├── FamilyId (Guid, indexed; shared by tokens in one rotated session)
   ├── TokenHash (varchar(128), Unique Index)
   ├── ExpiresAt (timestamptz)
   ├── CreatedAt (timestamptz)
@@ -182,7 +184,7 @@ _Note: Identical response is returned whether the email does not exist or the pa
   └── ReplacedByTokenId (Guid, nullable)
   ```
 - **Session Isolation:** Multiple concurrent sessions for the same user are supported without overwriting prior valid tokens.
-- **Replay Protection Foundation:** Revocation/rotation foundation exists; full replay protection will be implemented with the refresh-token endpoint.
+- **Rotation and Replay Protection:** `POST /api/auth/refresh` rotates the cookie token within its family. Reuse of a rotated token revokes active tokens in that family; independent login families remain unaffected. See [Refresh Token Rotation](./refresh-token.md).
 
 ### ASP.NET Core JWT Middleware
 
@@ -543,4 +545,3 @@ The following items are outside the scope of Login (Steps 1 through 8) and are d
 4. **Rate Limiting & Brute-Force Protection:** Not currently implemented; deferred security hardening.
 5. **Multi-Factor Authentication (MFA / TOTP):** Phase 9 (TOTP / 2FA).
 6. **Production HTTPS / HSTS & CSP Header Enforcement:** Deferred to production infrastructure configuration.
-

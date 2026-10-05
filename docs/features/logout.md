@@ -4,14 +4,14 @@
 
 **Status: Step 10 — Complete ✅ (Steps 1–10 Complete)**
 
-Logout provides secure session termination for authenticated users by revoking the persistent refresh-token session identified by the incoming `refreshToken` cookie and instructing the user agent to clear the cookie.
+Logout provides secure session termination by revoking the refresh-token family selected by the incoming `refreshToken` cookie and instructing the user agent to clear the cookie.
 
 ### Vertical Slice Lifecycle Summary
 
-- **Step 1: Requirement** — Complete (Single-session revocation, idempotent logout, cookie clearing, stateless JWT lifetime boundary)
+- **Step 1: Requirement** — Complete (Single-login-family revocation, idempotent logout, cookie clearing, stateless JWT lifetime boundary)
 - **Step 2: Design** — Complete (API contract: `POST /api/auth/logout`, cookie-based session identification, HTTP 204 No Content response)
 - **Step 3: Security Analysis** — Complete (Threat modeling: session isolation, token oracle defense, sensitive data exposure defense, CSRF boundary)
-- **Step 4: Backend Implementation** — Complete (`POST /api/auth/logout`, `ILogoutUserHandler`, `LogoutUserHandler`, single-session revocation, HttpOnly cookie deletion, idempotent 204 response)
+- **Step 4: Backend Implementation** — Complete (`POST /api/auth/logout`, `ILogoutUserHandler`, `LogoutUserHandler`, family revocation, HttpOnly cookie deletion, idempotent 204 response)
 - **Step 5: Frontend Implementation** — Complete (`logoutUser` API client, `AuthContext.logout`, authenticated-view Log Out control, local state cleared even on API failure, memory-only access token preserved, HttpOnly refresh cookie untouched by JavaScript)
 - **Step 6: Integration** — Complete (End-to-end integration verified across frontend state, HTTP contract, cookie deletion, and database session revocation)
 - **Step 7: End-to-End Testing** — Complete (Verified complete logout user journey in real Chromium browser using Playwright against live Vite dev server, ASP.NET Core API, and PostgreSQL database)
@@ -67,11 +67,13 @@ ILogoutUserHandler / LogoutUserHandler
        ↓
 ITokenService.HashRefreshToken (SHA-256)
        ↓
-IRefreshTokenRepository.GetByHashAsync
+IRefreshTokenRepository.GetByHashAsync (discover owner)
        ↓
-RefreshToken.Revoke() (if active)
+IUnitOfWork.ExecuteInTransactionAsync
        ↓
-IUnitOfWork.SaveChangesAsync()
+Lock owner row → reload token → load its FamilyId
+       ↓
+Revoke active tokens in that family → SaveChangesAsync
        ↓
 PostgreSQL ("RefreshTokens" table)
        ↓
@@ -83,7 +85,7 @@ HTTP 204 No Content
 ### Key Components
 
 1. **`AuthController.Logout`** ([AuthController.cs](../../src/PasswordManager.API/Controllers/AuthController.cs)): Thin controller action; extracts `refreshToken` cookie, invokes `_logoutUserHandler.HandleAsync`, issues cookie deletion instruction with matching configuration, returns `NoContent()`.
-2. **`ILogoutUserHandler` / `LogoutUserHandler`** ([LogoutUserHandler.cs](../../src/PasswordManager.Application/Features/Authentication/Logout/LogoutUserHandler.cs)): Application service responsible for hashing the raw refresh token, retrieving the matching entity from `IRefreshTokenRepository`, and revoking it if active.
+2. **`ILogoutUserHandler` / `LogoutUserHandler`** ([LogoutUserHandler.cs](../../src/PasswordManager.Application/Features/Authentication/Logout/LogoutUserHandler.cs)): Application service hashes the cookie token, locks and reloads its owner-scoped state inside a transaction, then revokes active tokens in that token's family.
 3. **`RefreshToken` Domain Entity** ([RefreshToken.cs](../../src/PasswordManager.Domain/Entities/RefreshToken.cs)): Encapsulates `RevokedAt` timestamp and `IsActive` logic (`!IsRevoked && !IsExpired`).
 4. **`RefreshTokenRepository`** ([RefreshTokenRepository.cs](../../src/PasswordManager.Infrastructure/Repositories/RefreshTokenRepository.cs)): Queries `RefreshTokens` by `TokenHash`.
 
@@ -93,11 +95,11 @@ HTTP 204 No Content
 
 | Scenario | Input Condition | Database Action | Cookie Action | Response Status | Response Body |
 | :--- | :--- | :--- | :--- | :---: | :---: |
-| **Valid Active Session** | Cookie contains active `refreshToken` | `RevokedAt = DateTime.UtcNow` persisted | Cookie cleared (`expires=1970-01-01`) | `204 No Content` | Empty |
+| **Valid Session Family** | Cookie contains active `refreshToken` | Active records in its family are revoked transactionally | Cookie cleared (`expires=1970-01-01`) | `204 No Content` | Empty |
 | **Missing Cookie** | No `refreshToken` cookie present | No DB query / no modification | Cookie cleared | `204 No Content` | Empty |
 | **Unknown / Tampered Token** | Token hash does not match any record | No modification | Cookie cleared | `204 No Content` | Empty |
-| **Already Revoked Token** | Matching record has `RevokedAt != null` | No modification (idempotent) | Cookie cleared | `204 No Content` | Empty |
-| **Expired Token** | Matching record has `ExpiresAt <= UtcNow` | No modification (remains expired) | Cookie cleared | `204 No Content` | Empty |
+| **Already Revoked Token** | Matching record has `RevokedAt != null` | Its family is revoked if active descendants remain; otherwise no modification | Cookie cleared | `204 No Content` | Empty |
+| **Expired Token** | Matching record has `ExpiresAt <= UtcNow` | Revoke active family descendants if present; otherwise no modification | Cookie cleared | `204 No Content` | Empty |
 | **Whitespace / Malformed** | Empty or malformed string | No DB query / no modification | Cookie cleared | `204 No Content` | Empty |
 
 ### Token Oracle Defense
@@ -120,10 +122,10 @@ The cookie deletion header matches the configuration used when the cookie was or
 
 ## 6. Multiple Session Behavior (Session Isolation)
 
-VaultX supports multiple concurrent sessions per user account (e.g., desktop browser and mobile device).
+VaultX supports multiple concurrent login families per user account (e.g., desktop browser and mobile device). Rotation links successive refresh-token records into one family.
 
-- **Current Session Only:** Calling `POST /api/auth/logout` revokes **only** the single refresh-token record identified by the submitted `refreshToken` cookie.
-- **Other Sessions Preserved:** All other active refresh tokens belonging to the user remain active and unrevoked (`RevokedAt == null`, `IsActive == true`).
+- **Current Login Family Only:** Calling `POST /api/auth/logout` revokes active records only in the family identified by the submitted cookie, including rotated descendants.
+- **Other Login Families Preserved:** Independent login families remain active and unrevoked (`RevokedAt == null`, `IsActive == true`).
 - **No Global Logout:** Global logout across all user devices is explicitly out of scope for Step 4 and deferred to future session management work.
 
 ---
@@ -133,7 +135,7 @@ VaultX supports multiple concurrent sessions per user account (e.g., desktop bro
 - **JWT Access Tokens:** Access tokens are short-lived, stateless HMAC-SHA256 JWTs (~15-minute lifespan) containing user claims.
 - **No Token Blacklist:** The logout endpoint does **not** implement a centralized JWT blacklist or distributed cache for already-issued JWT access tokens.
 - **Cryptographic Validity:** An already-issued JWT access token remains cryptographically verifiable until its expiration timestamp.
-- **Immediate Refresh Revocation:** Logout immediately invalidates the persistent refresh token session in PostgreSQL, preventing the client from obtaining any future access tokens via the refresh flow.
+- **Immediate Refresh Revocation:** Logout immediately invalidates the persistent refresh-token family in PostgreSQL, preventing future access tokens from that session via refresh. An already-issued access JWT remains valid until expiry.
 
 ---
 
@@ -319,7 +321,7 @@ The Step 6 integration verifies that frontend client actions, HTTP cookie transp
 #### Backend Integration Tests ([LogoutIntegrationTests.cs](../../tests/PasswordManager.IntegrationTests/Integration/LogoutIntegrationTests.cs)) — 7 Tests
 - `Registration_Then_Login_Then_Logout_FullLifecycle_Succeeds_WithDatabaseRevocation_AndCookieDeletion` — Verifies complete lifecycle from account registration to session revocation and cookie deletion.
 - `Logout_CookieDeletion_AdheresToContract_AndEnvironmentAwareSecurePolicy` — Verifies cookie deletion contract (`refreshToken`, `/api/auth`, `HttpOnly`, `SameSite=Lax`, expiration) and dynamic `Secure` flag policy across HTTP and HTTPS schemes.
-- `Logout_MultipleSessions_RevokesOnlyTargetSession_LeavingOtherSessionsActive` — Verifies single-session revocation and multi-session isolation.
+- `Logout_MultipleSessions_RevokesOnlyTargetSession_LeavingOtherSessionsActive` — Verifies login-family revocation and isolation of independent sessions.
 - `Logout_WithoutCookie_Returns204NoContent_WithoutModifyingDatabase` — Verifies missing cookie resilience and database immutability.
 - `Logout_AlreadyRevokedSession_Returns204NoContent_IdempotentlyPreservingTimestamp` — Verifies idempotent 204 response and timestamp preservation.
 - `Logout_ExpiredSession_Returns204NoContent_DoesNotReactivate` — Verifies expired session handling without reactivation.

@@ -16,6 +16,7 @@ public class RefreshTokenTests
 
         Assert.NotEqual(Guid.Empty, token.Id);
         Assert.Equal(userId, token.UserId);
+        Assert.NotEqual(Guid.Empty, token.FamilyId);
         Assert.Equal(tokenHash, token.TokenHash);
         Assert.Equal(expiresAt, token.ExpiresAt);
         Assert.True(token.CreatedAt <= DateTime.UtcNow);
@@ -24,6 +25,31 @@ public class RefreshTokenTests
         Assert.True(token.IsActive);
         Assert.False(token.IsRevoked);
         Assert.False(token.IsExpired);
+    }
+
+    [Fact]
+    public void Constructor_ExplicitFamilyId_AssignsFamilyToRefreshToken()
+    {
+        var familyId = Guid.NewGuid();
+
+        var token = new RefreshToken(
+            Guid.NewGuid(),
+            familyId,
+            "sampletokenhash123456",
+            DateTime.UtcNow.AddDays(7));
+
+        Assert.Equal(familyId, token.FamilyId);
+    }
+
+    [Fact]
+    public void Constructor_EmptyFamilyId_ThrowsArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new RefreshToken(
+                Guid.NewGuid(),
+                Guid.Empty,
+                "sampletokenhash123456",
+                DateTime.UtcNow.AddDays(7)));
     }
 
     [Fact]

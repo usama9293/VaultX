@@ -42,11 +42,43 @@ public class LogoutUserHandler : ILogoutUserHandler
             return;
         }
 
-        var refreshToken = await _refreshTokenRepository.GetByHashAsync(tokenHash, cancellationToken);
-        if (refreshToken is not null && refreshToken.IsActive)
+        var discoveredToken = await _refreshTokenRepository.GetByHashAsync(tokenHash, cancellationToken);
+        if (discoveredToken is null)
         {
-            refreshToken.Revoke();
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return;
         }
+
+        await _unitOfWork.ExecuteInTransactionAsync(
+            async transactionToken =>
+            {
+                await _refreshTokenRepository.LockUserAsync(discoveredToken.UserId, transactionToken);
+
+                var refreshToken = await _refreshTokenRepository.GetByHashAsync(tokenHash, transactionToken);
+                if (refreshToken is null)
+                {
+                    return false;
+                }
+
+                var familyTokens = await _refreshTokenRepository.GetByFamilyIdAsync(
+                    refreshToken.FamilyId,
+                    transactionToken);
+                var familyChanged = false;
+                foreach (var familyToken in familyTokens)
+                {
+                    if (familyToken.IsActive)
+                    {
+                        familyToken.Revoke();
+                        familyChanged = true;
+                    }
+                }
+
+                if (familyChanged)
+                {
+                    await _unitOfWork.SaveChangesAsync(transactionToken);
+                }
+
+                return familyChanged;
+            },
+            cancellationToken);
     }
 }

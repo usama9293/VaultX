@@ -17,6 +17,17 @@ public class LogoutUserHandlerTests
 
     public LogoutUserHandlerTests()
     {
+        _unitOfWorkMock
+            .Setup(u => u.ExecuteInTransactionAsync(
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns((Func<CancellationToken, Task<bool>> operation, CancellationToken cancellationToken) =>
+                operation(cancellationToken));
+
+        _refreshTokenRepositoryMock
+            .Setup(r => r.GetByFamilyIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<RefreshToken>());
+
         _handler = new LogoutUserHandler(
             _refreshTokenRepositoryMock.Object,
             _tokenServiceMock.Object,
@@ -59,6 +70,10 @@ public class LogoutUserHandlerTests
         _refreshTokenRepositoryMock
             .Setup(r => r.GetByHashAsync(tokenHash, It.IsAny<CancellationToken>()))
             .ReturnsAsync(token);
+
+        _refreshTokenRepositoryMock
+            .Setup(r => r.GetByFamilyIdAsync(token.FamilyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<RefreshToken> { token });
 
         _unitOfWorkMock
             .Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))

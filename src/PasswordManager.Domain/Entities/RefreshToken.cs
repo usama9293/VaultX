@@ -4,6 +4,7 @@ public class RefreshToken
 {
     public Guid Id { get; private set; }
     public Guid UserId { get; private set; }
+    public Guid FamilyId { get; private set; }
     public string TokenHash { get; private set; } = string.Empty;
     public DateTime ExpiresAt { get; private set; }
     public DateTime CreatedAt { get; private set; }
@@ -21,10 +22,20 @@ public class RefreshToken
     }
 
     public RefreshToken(Guid userId, string tokenHash, DateTime expiresAt)
+        : this(userId, Guid.NewGuid(), tokenHash, expiresAt)
+    {
+    }
+
+    public RefreshToken(Guid userId, Guid familyId, string tokenHash, DateTime expiresAt)
     {
         if (userId == Guid.Empty)
         {
             throw new ArgumentException("UserId cannot be empty.", nameof(userId));
+        }
+
+        if (familyId == Guid.Empty)
+        {
+            throw new ArgumentException("FamilyId cannot be empty.", nameof(familyId));
         }
 
         if (string.IsNullOrWhiteSpace(tokenHash))
@@ -39,6 +50,7 @@ public class RefreshToken
 
         Id = Guid.NewGuid();
         UserId = userId;
+        FamilyId = familyId;
         TokenHash = tokenHash.Trim();
         ExpiresAt = expiresAt;
         CreatedAt = DateTime.UtcNow;

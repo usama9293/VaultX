@@ -85,6 +85,7 @@ public class LoginUserHandlerTests
         // Verify refresh token entity
         Assert.NotNull(capturedToken);
         Assert.Equal(user.Id, capturedToken.UserId);
+        Assert.NotEqual(Guid.Empty, capturedToken.FamilyId);
         Assert.Equal(tokenHash, capturedToken.TokenHash);
         Assert.NotEqual(rawRefreshToken, capturedToken.TokenHash); // Raw token is NOT persisted
 
