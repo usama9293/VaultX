@@ -2,9 +2,14 @@ namespace PasswordManager.Domain.Entities;
 
 public class User
 {
+    public const int LoginFailureThreshold = 5;
+    public static readonly TimeSpan LoginLockoutDuration = TimeSpan.FromMinutes(15);
+
     public Guid Id { get; private set; }
     public string Email { get; private set; } = string.Empty;
     public byte[] PasswordHash { get; private set; } = Array.Empty<byte>();
+    public int FailedLoginAttempts { get; private set; }
+    public DateTime? LockedUntil { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
 
@@ -54,5 +59,51 @@ public class User
 
         PasswordHash = passwordHash.ToArray();
         UpdatedAt = DateTime.UtcNow;
+    }
+
+    public bool IsLocked(DateTime utcNow)
+    {
+        EnsureUtc(utcNow);
+        return LockedUntil is not null && LockedUntil > utcNow;
+    }
+
+    public void RecordFailedLogin(DateTime utcNow)
+    {
+        EnsureUtc(utcNow);
+
+        if (IsLocked(utcNow))
+        {
+            return;
+        }
+
+        ClearExpiredLockout(utcNow);
+        FailedLoginAttempts++;
+        if (FailedLoginAttempts >= LoginFailureThreshold)
+        {
+            LockedUntil = utcNow.Add(LoginLockoutDuration);
+        }
+    }
+
+    public void ClearExpiredLockout(DateTime utcNow)
+    {
+        EnsureUtc(utcNow);
+        if (LockedUntil is not null && LockedUntil <= utcNow)
+        {
+            ResetLoginFailures();
+        }
+    }
+
+    public void ResetLoginFailures()
+    {
+        FailedLoginAttempts = 0;
+        LockedUntil = null;
+    }
+
+    private static void EnsureUtc(DateTime value)
+    {
+        if (value.Kind != DateTimeKind.Utc)
+        {
+            throw new ArgumentException("Timestamp must be UTC.", nameof(value));
+        }
     }
 }

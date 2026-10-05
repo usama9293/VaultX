@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Configuration;
 using PasswordManager.API;
 using PasswordManager.Infrastructure.Persistence;
 
@@ -15,6 +16,17 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        builder.ConfigureAppConfiguration((_, configuration) =>
+        {
+            configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["RateLimiting:Global:PermitLimit"] = "10000",
+                ["RateLimiting:Login:PermitLimit"] = "1000",
+                ["RateLimiting:Registration:PermitLimit"] = "1000",
+                ["RateLimiting:Refresh:PermitLimit"] = "1000"
+            });
+        });
+
         builder.ConfigureServices(services =>
         {
             services.AddControllers().AddApplicationPart(typeof(CustomWebApplicationFactory).Assembly);

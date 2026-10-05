@@ -23,6 +23,13 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .IsRequired()
             .HasColumnType("bytea");
 
+        builder.Property(x => x.FailedLoginAttempts)
+            .IsRequired()
+            .HasDefaultValue(0);
+
+        builder.Property(x => x.LockedUntil)
+            .IsRequired(false);
+
         builder.Property(x => x.CreatedAt)
             .IsRequired();
 

@@ -93,6 +93,7 @@ Registration UI Success State
 - **Path:** `/api/auth/register`
 - **Consumes:** `application/json`
 - **Produces:** `application/json`
+- **Rate limit:** 5 requests per hour per normalized remote IP, in addition to the global API limit. Excess requests receive generic HTTP 429 ProblemDetails.
 
 ### Request Payload
 
@@ -341,11 +342,12 @@ frontend/src/
 
 The following items were identified and explicitly deferred to their appropriate future roadmap phases:
 
-1. **Registration Rate Limiting / Abuse Protection:** Deferred security hardening work to implement IP/identity rate limiting with distributed cache support.
-2. **IDOR / Authorization Verification:** Registration is an unauthenticated resource creation endpoint; IDOR authorization testing is deferred until authenticated resource endpoints exist.
-3. **Production HTTPS & HSTS:** Deferred to production infrastructure and deployment environment configuration.
-4. **Production CSP & Advanced Security Headers:** Deferred to production reverse proxy / gateway configuration.
-5. **Argon2id Cryptographic Migration:** PBKDF2-HMAC-SHA256 serves as the verified registration baseline; migration to Argon2id will take place during the dedicated Cryptographic Strategy Phase.
+1. **Duplicate-email enumeration:** The existing HTTP 409 duplicate-email response is intentionally preserved in Phase 2.4; changing that registration contract is deferred.
+2. **Distributed rate limiting:** Rate limits are process-local in Phase 2.4; sharing them across horizontally scaled instances is later production infrastructure work.
+3. **IDOR / Authorization Verification:** Registration is an unauthenticated resource creation endpoint; IDOR authorization testing is deferred until authenticated resource endpoints exist.
+4. **Production HTTPS & HSTS:** Deferred to production infrastructure and deployment environment configuration.
+5. **Production CSP & Advanced Security Headers:** Deferred to production reverse proxy / gateway configuration.
+6. **Argon2id Cryptographic Migration:** PBKDF2-HMAC-SHA256 serves as the verified registration baseline; migration to Argon2id will take place during the dedicated Cryptographic Strategy Phase.
 
 ---
 

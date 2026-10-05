@@ -37,11 +37,17 @@ Application Layer
   ├─ Normalize Email (trim and lowercase invariant)
   │
   ├─ User Lookup via UserRepository.GetByEmailAsync
-  │    - If user not found: throw InvalidCredentialsException ("Invalid email or password.")
+  │    - If user not found: perform dummy PBKDF2 verification then return generic 401
   │
   ├─ Password Verification via IPasswordHasher.VerifyPasswordAsync
   │    - Compares supplied password against stored PBKDF2 hash using constant-time comparison
+  │    - Failed attempts update lockout state in a transaction after acquiring the PostgreSQL user-row lock
+  │    - Active lockout returns the same generic 401 as all other login failures
   │    - If invalid: throw InvalidCredentialsException ("Invalid email or password.")
+  │
+  ├─ Successful password verification is followed by a transaction and fresh lockout-state read
+  │    - An active lock established concurrently prevents token issuance
+  │    - On success, reset lockout state and persist the refresh session atomically
   │
   ▼
 Session & Token Generation
@@ -89,6 +95,8 @@ Safe JSON Response
 - **Path:** `/api/auth/login`
 - **Consumes:** `application/json`
 - **Produces:** `application/json`
+- **Rate limit:** 10 requests per minute per normalized remote IP, in addition to the global API limit.
+- **Rate-limit response:** Generic HTTP 429 ProblemDetails; `Retry-After` is sent if the limiter provides a retry duration.
 
 ### Request Payload
 
@@ -306,7 +314,7 @@ Frontend AuthContext State Update
 - Frontend integration tests verify that `localStorage`, `sessionStorage`, and URL paths contain zero token or sensitive credential residues.
 
 4. **Resilience & Error Handling:**
-   - Generic 401 ProblemDetails returned for non-existent users, wrong passwords, and casing variations, effectively thwarting user enumeration.
+   - Generic 401 ProblemDetails returned for non-existent users, wrong passwords, and casing variations; response content is consistent, but the Phase 2.4 lockout transaction leaves a documented timing-based enumeration risk.
    - 400 Bad Request returned with RFC 9110 validation errors for missing or malformed inputs.
    - Network connectivity failures trigger clean client-side alert banners without crashing the application.
 
@@ -316,7 +324,9 @@ Frontend AuthContext State Update
 
 | Threat                                  | Defense                                                                                                                                                                                                | Verification                | Status                     |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------- | -------------------------- |
-| User enumeration                        | Generic authentication failure (`"Invalid email or password."`) returned for both nonexistent emails and wrong passwords.                                                                              | Integration & Frontend test | Verified                   |
+| User enumeration                        | Generic authentication failure (`"Invalid email or password."`) returned for both nonexistent emails and wrong passwords. Dummy PBKDF2 is used for unknown users, but known-account lockout persistence adds a PostgreSQL row-lock/update path; response timing may differ and remains a residual enumeration risk. | Integration & Frontend test | Response verified; timing limitation documented |
+| Account guessing                        | Five consecutive password failures lock the account for 15 minutes; locked, unknown, and incorrect-password login attempts share the generic 401 response.                                            | Lockout integration tests    | Implemented                 |
+| Concurrent failed logins                | PostgreSQL user-row locking and a fresh state read serialize lockout updates; password hashing remains outside the transaction.                                                                        | PostgreSQL concurrency test  | Implemented                 |
 | Password exposure                       | Plaintext password is never logged, persisted, returned in responses, or stored in cookies. Processed only in-memory and wiped from component state.                                                   | Security test               | Verified                   |
 | JavaScript access to refresh token      | Transmitted solely via secure `HttpOnly` cookie with `Path=/api/auth`. HttpOnly prevents JavaScript from directly reading the refresh-token cookie; XSS itself is not fully prevented by this feature. | Security & Integration test | Verified                   |
 | Database exposure of refresh tokens     | The raw refresh token is not stored in PostgreSQL; only its SHA-256 hash is stored, so database contents do not directly expose the refresh-token cookie value.                                        | Integration & DB test       | Verified                   |
@@ -327,7 +337,7 @@ Frontend AuthContext State Update
 | Expired JWT reuse                       | Strict lifetime verification with zero clock skew (`ClockSkew = TimeSpan.Zero`) rejects expired JWTs.                                                                                                  | Integration test            | Verified                   |
 | Error disclosure                        | Centralized `ExceptionHandlingMiddleware` and frontend API client ensure sanitized ProblemDetails and generic safe messages.                                                                           | Security test               | Verified                   |
 | CORS abuse                              | Scoped to explicitly allowed development origins (`http://localhost:5173`, etc.) with `AllowCredentials()`. Wildcards rejected.                                                                        | Security test               | Verified                   |
-| Rate limiting / brute-force protection  | Not currently implemented; deferred security hardening.                                                                                                                                                | Deferred security hardening | Deferred                   |
+| API request flooding                    | In-process global and endpoint-specific sliding-window policies return generic 429 responses with no queue.                                                                                            | Rate-limit integration tests | Implemented                 |
 
 ---
 
@@ -485,7 +495,7 @@ To maintain strict architectural transparency and documentation precision, the s
 #### Tested and Verified Security Controls
 - **Email Normalization & Validation:** Static C# validator enforces length ($\le 320$) and RFC email syntax; lowercased and trimmed before database query.
 - **Constant-Time Password Verification:** PBKDF2-SHA256 (100,000 iterations, 128-bit salt, 256-bit subkey) with `CryptographicOperations.FixedTimeEquals` to prevent timing attacks.
-- **User Enumeration Invariance:** Confirmed that existing-user and nonexistent-user login failures yield bitwise-indistinguishable RFC 9110 ProblemDetails payloads (`"Invalid email or password."`), identical 401 status codes, and omission of Set-Cookie headers.
+- **Login failure response consistency:** Existing-user and nonexistent-user failures yield the same RFC 9110 ProblemDetails payload (`"Invalid email or password."`), 401 status, and no `Set-Cookie` header. This verifies response content, not timing equivalence. The Phase 2.4 known-account lockout transaction creates a residual timing-based account-enumeration risk; see [rate-limiting-lockout.md](./rate-limiting-lockout.md).
 - **Refresh-Token Persistence Foundation:** Raw 64-byte CSPRNG refresh token is never stored in PostgreSQL; only its deterministic SHA-256 hex hash is persisted. The current Login slice stores refresh-token hashes and establishes the persistence foundation, while actual refresh-token rotation/replay handling belongs to the future refresh endpoint/session-security slice.
 - **Cookie Security Defense:** `HttpOnly`, `Path=/api/auth`, `SameSite=Lax` restrict cookie exposure and prevent JavaScript access.
 - **In-Memory Access Token Storage:** Confirmed across both Vitest and Playwright real-browser tests that access tokens are held strictly in React memory; 0 occurrences in `localStorage`, `sessionStorage`, `document.cookie`, or browser URLs.
@@ -503,11 +513,13 @@ To maintain strict architectural transparency and documentation precision, the s
 - **Multi-Factor Authentication (MFA / TOTP):** Second-factor challenge flow; belongs to Phase 9.
 
 #### Deferred Security Hardening
-- **Rate Limiting & Brute-Force Protection:** Not currently implemented; deferred security hardening. (Not an implementation defect or vulnerability discovered in Step 8, but a planned infrastructure hardening control).
+- **Distributed rate limiting:** Current counters are in-process and are not shared across horizontally scaled API instances.
+- **Login timing-based account enumeration:** Unknown accounts receive dummy PBKDF2 verification and return the generic 401, while incorrect passwords for known accounts also require a PostgreSQL-locked lockout-state update. The resulting response timing may differ; no artificial delay or fake database write is introduced, and the required lockout transaction is preserved. This is a documented residual risk, not a claim of timing equalization.
+- **Registration account enumeration:** Duplicate registration continues returning the existing 409 response by design; changing that contract is deferred.
 - **Production HTTPS / HSTS & CSP Header Enforcement:** Deferred to production infrastructure configuration and hosting environment.
 
 #### Vulnerabilities Actually Discovered
-- **Findings:** No vulnerabilities were identified within the tested Login attack surface.
+- **Prior Step 8 findings:** No vulnerabilities were identified within the attack scenarios tested during the original Login Step 8 review. The later Phase 2.4 login timing limitation is documented above and in [rate-limiting-lockout.md](./rate-limiting-lockout.md).
 - **Scope Limit:** All evaluated scenarios confirmed that tested security controls operate as specified. This conclusion is strictly limited to the tested attack scenarios and does not imply that unexamined attack surfaces or future features are proven vulnerability-free.
 - **Vulnerabilities Fixed:** None required.
 - **Regression Impact:** None; all 228 total automated tests across frontend, backend, and browser E2E continue to pass.
@@ -542,6 +554,6 @@ The following items are outside the scope of Login (Steps 1 through 8) and are d
 1. **Token Refresh Endpoint (`POST /api/auth/refresh`):** The current Login slice stores refresh-token hashes and establishes the persistence foundation, while actual refresh-token rotation/replay handling belongs to the future refresh endpoint/session-security slice.
 2. **Logout Endpoint (`POST /api/auth/logout`):** Phase 2, Section 6.3 (Logout).
 3. **Protected Routes:** Phase 2, Section 6.4 (Protected Routes).
-4. **Rate Limiting & Brute-Force Protection:** Not currently implemented; deferred security hardening.
+4. **Distributed Rate Limiting:** Cross-instance counters require future distributed infrastructure and remain out of scope.
 5. **Multi-Factor Authentication (MFA / TOTP):** Phase 9 (TOTP / 2FA).
 6. **Production HTTPS / HSTS & CSP Header Enforcement:** Deferred to production infrastructure configuration.

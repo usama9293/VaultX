@@ -11,6 +11,9 @@ namespace PasswordManager.Application.Features.Authentication.Login;
 
 public class LoginUserHandler : ILoginUserHandler
 {
+    private const string UnknownAccountDummyPasswordHash =
+        "$pbkdf2-sha256$i=100000$s=VmF1bHRYLUR1bW15LVNhbHQh$h=h4e8YZTbt4pwoh/Jy+o1ZqiUzDK50A682L/2eKkVYLY=";
+
     private readonly IUserRepository _userRepository;
     private readonly IRefreshTokenRepository _refreshTokenRepository;
     private readonly IPasswordHasher _passwordHasher;
@@ -48,34 +51,68 @@ public class LoginUserHandler : ILoginUserHandler
         var user = await _userRepository.GetByEmailAsync(normalizedEmail, cancellationToken);
         if (user is null)
         {
+            await _passwordHasher.VerifyPasswordAsync(
+                command.Password,
+                UnknownAccountDummyPasswordHash,
+                cancellationToken);
             // Generic authentication failure to prevent user enumeration
-            throw new InvalidCredentialsException("Invalid email or password.");
+            throw InvalidCredentials();
         }
 
         // Verify password against stored hash using password-hashing abstraction
         var storedHash = Encoding.UTF8.GetString(user.PasswordHash);
         var isPasswordValid = await _passwordHasher.VerifyPasswordAsync(command.Password, storedHash, cancellationToken);
-        if (!isPasswordValid)
-        {
-            // Generic authentication failure to prevent user enumeration
-            throw new InvalidCredentialsException("Invalid email or password.");
-        }
 
-        // Generate short-lived JWT access token
-        var (accessToken, accessExpiresAt) = _tokenService.GenerateAccessToken(user);
+        var loginResult = await _unitOfWork.ExecuteInTransactionAsync<LoginResult?>(
+            async transactionToken =>
+            {
+                await _userRepository.LockUserAsync(user.Id, transactionToken);
 
-        // Generate cryptographically secure opaque refresh token
-        var (rawRefreshToken, tokenHash, refreshExpiresAt) = _tokenService.GenerateRefreshToken();
+                var currentUser = await _userRepository.GetFreshByIdAsync(user.Id, transactionToken);
+                if (currentUser is null)
+                {
+                    return null;
+                }
 
-        // Create and persist refresh token session (preserves existing sessions)
-        var refreshToken = new RefreshToken(user.Id, tokenHash, refreshExpiresAt);
-        await _refreshTokenRepository.AddAsync(refreshToken, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+                var now = DateTime.UtcNow;
+                currentUser.ClearExpiredLockout(now);
+                if (currentUser.IsLocked(now))
+                {
+                    return null;
+                }
 
-        return new LoginResult(
-            accessToken,
-            accessExpiresAt,
-            rawRefreshToken,
-            refreshExpiresAt);
+                if (!isPasswordValid)
+                {
+                    currentUser.RecordFailedLogin(now);
+                    await _userRepository.UpdateAsync(currentUser, transactionToken);
+                    await _unitOfWork.SaveChangesAsync(transactionToken);
+                    return null;
+                }
+
+                currentUser.ResetLoginFailures();
+
+                var (accessToken, accessExpiresAt) = _tokenService.GenerateAccessToken(currentUser);
+                var (rawRefreshToken, tokenHash, refreshExpiresAt) =
+                    _tokenService.GenerateRefreshToken();
+                var refreshToken = new RefreshToken(currentUser.Id, tokenHash, refreshExpiresAt);
+
+                await _userRepository.UpdateAsync(currentUser, transactionToken);
+                await _refreshTokenRepository.AddAsync(refreshToken, transactionToken);
+                await _unitOfWork.SaveChangesAsync(transactionToken);
+
+                return new LoginResult(
+                    accessToken,
+                    accessExpiresAt,
+                    rawRefreshToken,
+                    refreshExpiresAt);
+            },
+            cancellationToken);
+
+        return loginResult ?? throw InvalidCredentials();
+    }
+
+    private static InvalidCredentialsException InvalidCredentials()
+    {
+        return new InvalidCredentialsException("Invalid email or password.");
     }
 }
