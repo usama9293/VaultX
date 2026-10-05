@@ -28,11 +28,12 @@ public class Program
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 
-        var jwtSection = builder.Configuration.GetSection(JwtSettings.SectionName);
-        var jwtSettings = jwtSection.Get<JwtSettings>() ?? new JwtSettings();
-        var secretKey = !string.IsNullOrWhiteSpace(jwtSettings.SecretKey)
-            ? jwtSettings.SecretKey
-            : "VaultX-Fallback-SecretKey-For-Testing-Minimum-32-Characters!";
+        builder.Services.AddOptions<JwtSettings>()
+            .Validate(
+                settings => !string.IsNullOrWhiteSpace(settings.SecretKey)
+                    && Encoding.UTF8.GetByteCount(settings.SecretKey) >= 32,
+                "JwtSettings:SecretKey must be configured with at least 32 UTF-8 bytes using a secure configuration provider.")
+            .ValidateOnStart();
 
         builder.Services.AddAuthentication(options =>
         {
@@ -41,6 +42,9 @@ public class Program
         })
         .AddJwtBearer(options =>
         {
+            var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()
+                ?? new JwtSettings();
+            var secretKey = jwtSettings.SecretKey;
             options.TokenValidationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,

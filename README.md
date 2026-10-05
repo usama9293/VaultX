@@ -62,6 +62,7 @@ Phase 1 (Architecture Foundation) and the Registration vertical slice (Phase 2, 
 
 - Plaintext master passwords are never persisted; password hashing uses PBKDF2-HMAC-SHA256 (future Argon2id migration planned).
 - Secrets and local credentials must not be committed to Git.
+- The API requires `JwtSettings__SecretKey` from secure configuration (at least 32 UTF-8 bytes) and fails startup if it is missing or too short; no usable signing-key default is included in the repository.
 - Cryptography will use established primitives and libraries.
 - Security decisions are documented before sensitive functionality is implemented.
 

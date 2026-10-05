@@ -85,8 +85,7 @@ public class LoginSecurityTests : IClassFixture<CustomWebApplicationFactory>
     [Fact]
     public async Task JwtMiddleware_ExpiredToken_Returns401Unauthorized()
     {
-        const string validSecret = "VaultX-Development-SecretKey-ChangeInProduction-Minimum256Bits!";
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(validSecret));
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSettings.SecretKey));
         var tokenHandler = new JwtSecurityTokenHandler();
         var descriptor = new SecurityTokenDescriptor
         {

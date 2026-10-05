@@ -20,6 +20,7 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
         {
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
+                ["JwtSettings:SecretKey"] = TestJwtSettings.SecretKey,
                 ["RateLimiting:Global:PermitLimit"] = "10000",
                 ["RateLimiting:Login:PermitLimit"] = "1000",
                 ["RateLimiting:Registration:PermitLimit"] = "1000",
