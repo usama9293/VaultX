@@ -16,6 +16,25 @@ describe('Login Integration & End-to-End User Flow', () => {
     sessionStorage.clear()
   })
 
+  const installFetchRoutes = (loginResponse: Response | Error) => {
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.endsWith('/api/auth/refresh')) {
+        return { ok: false, status: 401, json: async () => ({}) } as Response
+      }
+      if (url.endsWith('/api/auth/login')) {
+        if (loginResponse instanceof Error) {
+          throw loginResponse
+        }
+        return loginResponse
+      }
+      if (url.endsWith('/api/vault')) {
+        return { ok: false, status: 404, json: async () => ({}) } as Response
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+  }
+
   it('1. End-to-End: user logs in via real API contract, establishes in-memory session, and displays authenticated UI', async () => {
     const user = userEvent.setup()
     const mockAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e2e.sample.access.token'
@@ -23,7 +42,7 @@ describe('Login Integration & End-to-End User Flow', () => {
     const validPassword = 'SecurePass@VaultX2026!'
 
     // Mock real HTTP backend response according to API contract
-    vi.mocked(fetch).mockResolvedValueOnce({
+    installFetchRoutes({
       ok: true,
       status: 200,
       json: async () => ({
@@ -35,7 +54,7 @@ describe('Login Integration & End-to-End User Flow', () => {
     render(<App />)
 
     // 1. Verify Login UI is active by default
-    expect(screen.getByRole('heading', { name: /sign in/i })).toBeInTheDocument()
+    await screen.findByRole('heading', { name: /sign in/i })
 
     // 2. Fill in valid credentials
     const emailInput = screen.getByLabelText(/email address/i)
@@ -49,8 +68,10 @@ describe('Login Integration & End-to-End User Flow', () => {
     await user.click(submitBtn)
 
     // 4. Verify API request was made with exact contract and credentials: 'include'
-    expect(fetch).toHaveBeenCalledTimes(1)
-    const [requestUrl, requestInit] = vi.mocked(fetch).mock.calls[0]
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) =>
+      String(url).endsWith('/api/auth/login'))).toBe(true))
+    const [requestUrl, requestInit] = vi.mocked(fetch).mock.calls.find(([url]) =>
+      String(url).endsWith('/api/auth/login'))!
     expect(requestUrl).toContain('/api/auth/login')
     expect(requestInit?.method).toBe('POST')
     expect(requestInit?.credentials).toBe('include')
@@ -65,7 +86,7 @@ describe('Login Integration & End-to-End User Flow', () => {
     await waitFor(() => {
       expect(screen.getByRole('region', { name: /authenticated session/i })).toBeInTheDocument()
     })
-    expect(screen.getByText('Session Established')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Your Vault' })).toBeInTheDocument()
 
     // 6. Security Assertions: Access token is in-memory only; NOT in persistent storage or URL
     expect(localStorage.getItem('accessToken')).toBeNull()
@@ -86,7 +107,7 @@ describe('Login Integration & End-to-End User Flow', () => {
   it('2. End-to-End: invalid credentials return 401, display generic error, and keep user unauthenticated', async () => {
     const user = userEvent.setup()
 
-    vi.mocked(fetch).mockResolvedValueOnce({
+    installFetchRoutes({
       ok: false,
       status: 401,
       json: async () => ({
@@ -99,7 +120,7 @@ describe('Login Integration & End-to-End User Flow', () => {
 
     render(<App />)
 
-    const emailInput = screen.getByLabelText(/email address/i)
+    const emailInput = await screen.findByLabelText(/email address/i)
     const passwordInput = screen.getByLabelText(/^master password/i)
     const submitBtn = screen.getByRole('button', { name: /sign in to vaultx/i })
 
@@ -122,9 +143,10 @@ describe('Login Integration & End-to-End User Flow', () => {
 
   it('3. End-to-End: seamless navigation between Registration view and Login view', async () => {
     const user = userEvent.setup()
+    installFetchRoutes(new Error('No login request expected'))
     render(<App />)
 
-    const nav = screen.getByRole('navigation', { name: /authentication navigation/i })
+    const nav = await screen.findByRole('navigation', { name: /authentication navigation/i })
 
     // Click "Create Account" in navigation tab
     const registerTab = within(nav).getByRole('button', { name: /create account/i })
@@ -146,11 +168,11 @@ describe('Login Integration & End-to-End User Flow', () => {
   it('4. End-to-End: handles network disconnection gracefully with safe message', async () => {
     const user = userEvent.setup()
 
-    vi.mocked(fetch).mockRejectedValueOnce(new Error('Network error'))
+    installFetchRoutes(new Error('Network error'))
 
     render(<App />)
 
-    await user.type(screen.getByLabelText(/email address/i), 'user@vaultx.local')
+    await user.type(await screen.findByLabelText(/email address/i), 'user@vaultx.local')
     await user.type(screen.getByLabelText(/^master password/i), 'Password123!')
     await user.click(screen.getByRole('button', { name: /sign in to vaultx/i }))
 

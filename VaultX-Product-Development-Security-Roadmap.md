@@ -316,7 +316,7 @@ At the end of Phase 1:
 
 # 6. Phase 2 — Account & Authentication
 
-**Status: In Progress**
+**Status: Complete ✅**
 
 ## Goal
 
@@ -627,6 +627,8 @@ Frontend:
 - Empty-vault state
 - Loading/error states
 
+Phase 3 creates and accesses an empty, metadata-only vault. Search and Add Login shown in the initial dashboard sketch are deferred to Phase 4 and must not be functional in Phase 3.
+
 ---
 
 ## Vault Dashboard
@@ -637,9 +639,9 @@ Initial interface:
 ┌──────────────────────────────┐
 │ VaultX                  User │
 ├──────────────────────────────┤
-│ Search                       │
+│ (Search arrives in Phase 4)  │
 │                              │
-│ + Add Login                  │
+│ (Add Login arrives in Phase 4)│
 │                              │
 │ No passwords yet             │
 └──────────────────────────────┘
@@ -1602,10 +1604,10 @@ Post-Launch Development
 ```text
 Phase 0 — Product & Security Foundation     ✓ COMPLETE
 
-Phase 1 — Architecture Foundation          ← CURRENT
+Phase 1 — Architecture Foundation          ✓ COMPLETE
 
-Phase 2 — Account & Authentication         ⏳
-Phase 3 — Vault Creation & Access           ⏳
+Phase 2 — Account & Authentication         ✓ COMPLETE
+Phase 3 — Vault Creation & Access           ← CURRENT
 Phase 4 — Password Entries                  ⏳
 Phase 5 — Cryptographic Core                ⏳
 Phase 6 — Encrypted Vault                   ⏳

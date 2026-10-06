@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, loginUser, logoutUser, registerUser } from '../api/auth'
+import { ApiError, loginUser, logoutUser, refreshSession, registerUser } from '../api/auth'
 import type { LoginRequest, RegisterUserRequest } from '../types/auth'
 
 describe('auth API client - registerUser', () => {
@@ -211,6 +211,52 @@ describe('auth API client - logoutUser', () => {
     vi.stubGlobal('fetch', vi.fn())
   })
 
+  describe('auth API client - refreshSession', () => {
+    beforeEach(() => {
+      vi.stubGlobal('fetch', vi.fn())
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    it('refreshes the session using the HttpOnly cookie and coalesces concurrent calls', async () => {
+      const fetchMock = vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          accessToken: 'refreshed-access-token',
+          expiresAt: '2026-10-06T12:00:00Z',
+        }),
+      } as Response)
+
+      const first = refreshSession()
+      const second = refreshSession()
+      expect(first).toBe(second)
+
+      await expect(first).resolves.toEqual({
+        accessToken: 'refreshed-access-token',
+        expiresAt: '2026-10-06T12:00:00Z',
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      const [url, init] = fetchMock.mock.calls[0]
+      expect(url).toContain('/api/auth/refresh')
+      expect(init?.method).toBe('POST')
+      expect(init?.credentials).toBe('include')
+      expect(init?.body).toBeUndefined()
+    })
+
+    it('treats a rejected refresh cookie as an unauthenticated session', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({}),
+      } as Response)
+
+      await expect(refreshSession()).resolves.toBeNull()
+    })
+  })
+
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -283,4 +329,3 @@ describe('auth API client - logoutUser', () => {
     await expect(promise).rejects.toBeInstanceOf(ApiError)
   })
 })
-

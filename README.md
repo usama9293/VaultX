@@ -1,6 +1,6 @@
 # VaultX
 
-VaultX is a security-focused password and secrets manager being developed as a learning and portfolio project. It is currently in the architecture foundation stage; user-facing security features are not yet complete.
+VaultX is a security-focused password and secrets manager being developed as a learning and portfolio project. Phase 2 account and authentication functionality is complete; Phase 3 is implementing authenticated vault creation and access.
 
 ## Project Goals
 
@@ -52,7 +52,7 @@ Complete
 
 ## Current Status
 
-Phase 1 (Architecture Foundation) and the Registration vertical slice (Phase 2, Slice 2.1) are complete. The project has implemented backend registration, frontend UI, bidirectional API communication, and end-to-end security verification with 112 passing automated tests. Login, session management, protected routes, and vault encryption workflows remain future work.
+Phase 1 (Architecture Foundation) and Phase 2 (Account & Authentication) are complete, including registration, login, refresh-token rotation, logout, protected user resources, rate limiting, account lockout, and JWT signing-key hardening. Phase 3 (Vault Creation & Access) is current. Its initial vault is metadata-only; password entries belong to Phase 4, cryptographic primitives to Phase 5, encrypted-vault functionality to Phase 6, and zero-knowledge architecture to Phase 7.
 
 ## Branch Strategy
 

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PasswordManager.Application.Exceptions;
 using PasswordManager.Application.Interfaces;
+using Npgsql;
 
 namespace PasswordManager.Infrastructure.Persistence;
 
@@ -23,6 +24,10 @@ public class UnitOfWork : IUnitOfWork
         {
             throw new DuplicateEmailException("A user with this email already exists.", ex);
         }
+        catch (DbUpdateException ex) when (IsVaultUserUniqueConstraintViolation(ex))
+        {
+            throw new DuplicateVaultException("A vault already exists for this user.", ex);
+        }
     }
 
     public async Task<TResult> ExecuteInTransactionAsync<TResult>(
@@ -37,12 +42,24 @@ public class UnitOfWork : IUnitOfWork
         return result;
     }
 
-    private static bool IsEmailUniqueConstraintViolation(DbUpdateException ex)
-    {
-        var message = ex.InnerException?.Message ?? ex.Message;
+    private static bool IsEmailUniqueConstraintViolation(DbUpdateException ex) =>
+        ex.InnerException switch
+        {
+            PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: "IX_Users_Email"
+            } => true,
+            _ => (ex.InnerException?.Message ?? ex.Message)
+                .Contains("IX_Users_Email", StringComparison.OrdinalIgnoreCase)
+                || (ex.InnerException?.Message ?? ex.Message)
+                    .Contains("Users.Email", StringComparison.OrdinalIgnoreCase)
+        };
 
-        return message.Contains("IX_Users_Email", StringComparison.OrdinalIgnoreCase)
-            || message.Contains("23505", StringComparison.OrdinalIgnoreCase)
-            || (message.Contains("unique", StringComparison.OrdinalIgnoreCase) && message.Contains("email", StringComparison.OrdinalIgnoreCase));
-    }
+    private static bool IsVaultUserUniqueConstraintViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: "IX_Vaults_UserId"
+        };
 }

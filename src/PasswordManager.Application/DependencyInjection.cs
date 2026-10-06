@@ -4,6 +4,8 @@ using PasswordManager.Application.Features.Authentication.Logout;
 using PasswordManager.Application.Features.Authentication.Register;
 using PasswordManager.Application.Features.Authentication.Refresh;
 using PasswordManager.Application.Features.Users.GetById;
+using PasswordManager.Application.Features.Vault.GetCurrent;
+using PasswordManager.Application.Features.Vault.Initialize;
 
 namespace PasswordManager.Application;
 
@@ -16,6 +18,8 @@ public static class DependencyInjection
         services.AddScoped<ILogoutUserHandler, LogoutUserHandler>();
         services.AddScoped<IRefreshTokenHandler, RefreshTokenHandler>();
         services.AddScoped<IGetUserByIdHandler, GetUserByIdHandler>();
+        services.AddScoped<IInitializeVaultHandler, InitializeVaultHandler>();
+        services.AddScoped<IGetCurrentVaultHandler, GetCurrentVaultHandler>();
         return services;
     }
 }

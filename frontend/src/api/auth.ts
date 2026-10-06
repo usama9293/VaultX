@@ -145,3 +145,42 @@ export async function logoutUser(): Promise<void> {
   throw new ApiError('Unable to complete sign-out right now. Please try again.', response.status, errorData)
 }
 
+let refreshSessionRequest: Promise<LoginResponse | null> | null = null
+
+export function refreshSession(): Promise<LoginResponse | null> {
+  if (refreshSessionRequest !== null) {
+    return refreshSessionRequest
+  }
+
+  refreshSessionRequest = refreshSessionCore().finally(() => {
+    refreshSessionRequest = null
+  })
+  return refreshSessionRequest
+}
+
+async function refreshSessionCore(): Promise<LoginResponse | null> {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
+  let response: Response
+  try {
+    response = await fetch(`${baseUrl}/api/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+  } catch {
+    throw new ApiError('Unable to restore your session. Check your connection and try again.', 0)
+  }
+
+  if (response.status === 401) {
+    return null
+  }
+
+  if (!response.ok) {
+    throw new ApiError('Unable to restore your session. Please try again.', response.status)
+  }
+
+  try {
+    return (await response.json()) as LoginResponse
+  } catch {
+    throw new ApiError('The server returned an invalid session response.', response.status)
+  }
+}

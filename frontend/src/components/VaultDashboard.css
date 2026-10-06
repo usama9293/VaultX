@@ -1,0 +1,51 @@
+.vault-dashboard {
+  width: 100%;
+  max-width: 720px;
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 2.25rem 2rem;
+  box-shadow: var(--shadow-card);
+}
+
+.vault-dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.vault-dashboard-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 3rem 1rem 1rem;
+  text-align: center;
+}
+
+.vault-dashboard-state h2,
+.vault-dashboard-state p {
+  margin: 0;
+}
+
+.vault-dashboard-state p {
+  color: var(--text-secondary);
+}
+
+.vault-dashboard .form-status-alert {
+  width: 100%;
+}
+
+@media (max-width: 520px) {
+  .vault-dashboard {
+    padding: 1.5rem 1rem;
+  }
+
+  .vault-dashboard-header {
+    align-items: center;
+  }
+}

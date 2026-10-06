@@ -132,7 +132,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit }) => {
         <header className="form-header">
           <div className="brand-badge">VaultX Security</div>
           <h1 className="form-title">Registration Successful</h1>
-          <p className="form-subtitle">Your VaultX account has been initialized</p>
+          <p className="form-subtitle">Your VaultX account is ready</p>
         </header>
 
         <div className="form-status-alert success" role="status" aria-live="polite">
@@ -155,7 +155,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit }) => {
       <header className="form-header">
         <div className="brand-badge">VaultX Security</div>
         <h1 className="form-title">Create Account</h1>
-        <p className="form-subtitle">Register to initialize your secure zero-knowledge vault</p>
+        <p className="form-subtitle">Create your VaultX account to get started</p>
       </header>
 
       {errors.general && (

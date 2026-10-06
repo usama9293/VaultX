@@ -137,32 +137,41 @@ describe('Logout Integration & Application Flow', () => {
   it('1b. Full App Flow: user logs in through App, establishes session, logs out, and App transitions back to Sign In', async () => {
     const user = userEvent.setup()
 
-    // Mock Login response
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        accessToken: mockAccessToken,
-        expiresAt: mockExpiresAt,
-      }),
-    } as Response)
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.endsWith('/api/auth/refresh')) {
+        return { ok: false, status: 401, json: async () => ({}) } as Response
+      }
+      if (url.endsWith('/api/auth/login')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            accessToken: mockAccessToken,
+            expiresAt: mockExpiresAt,
+          }),
+        } as Response
+      }
+      if (url.endsWith('/api/vault')) {
+        return { ok: false, status: 404, json: async () => ({}) } as Response
+      }
+      if (url.endsWith('/api/auth/logout')) {
+        return { ok: true, status: 204 } as Response
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
 
     render(<App />)
 
     // Complete login flow
-    await user.type(screen.getByLabelText(/email address/i), 'integration.user@vaultx.local')
+    await user.type(await screen.findByLabelText(/email address/i), 'integration.user@vaultx.local')
     await user.type(screen.getByLabelText(/^master password/i), 'SecurePass2026!')
     await user.click(screen.getByRole('button', { name: /sign in to vaultx/i }))
 
     await waitFor(() => {
       expect(screen.getByRole('region', { name: /authenticated session/i })).toBeInTheDocument()
     })
-
-    // Mock Logout response
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 204,
-    } as Response)
+    expect(screen.getByRole('heading', { name: 'Your Vault' })).toBeInTheDocument()
 
     // Trigger logout
     await user.click(screen.getByRole('button', { name: /log out/i }))

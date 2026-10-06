@@ -29,7 +29,7 @@ test.describe('Login browser E2E', () => {
     expect(body.expiresAt.length).toBeGreaterThan(0)
 
     await expect(page.getByRole('region', { name: 'Authenticated Session' })).toBeVisible()
-    await expect(page.getByText('Session Established')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Your Vault' })).toBeVisible()
   })
 
   test('sets a protected refresh cookie without exposing it to JavaScript', async ({ page, request }) => {

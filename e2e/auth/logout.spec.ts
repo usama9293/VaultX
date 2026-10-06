@@ -21,7 +21,7 @@ async function loginAndVerifyAuthenticated(page: Page, email: string, password: 
   expect(loginResponse.status()).toBe(200)
 
   await expect(page.getByRole('region', { name: 'Authenticated Session' })).toBeVisible()
-  await expect(page.getByText('Session Established')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Your Vault' })).toBeVisible()
 
   const logoutButton = page.getByRole('button', { name: 'Log Out' })
   await expect(logoutButton).toBeVisible()

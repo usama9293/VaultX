@@ -1,0 +1,10 @@
+@baseUrl = http://localhost:5071
+@accessToken = paste-a-valid-access-token-here
+
+### Get the authenticated user's vault (404 before initialization)
+GET {{baseUrl}}/api/vault
+Authorization: Bearer {{accessToken}}
+
+### Initialize the authenticated user's vault (201 on first call, 200 thereafter)
+POST {{baseUrl}}/api/vault
+Authorization: Bearer {{accessToken}}

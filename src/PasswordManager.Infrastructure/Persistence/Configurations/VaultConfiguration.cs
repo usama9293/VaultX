@@ -18,18 +18,6 @@ public class VaultConfiguration : IEntityTypeConfiguration<Vault>
         builder.HasIndex(x => x.UserId)
             .IsUnique();
 
-        builder.Property(x => x.EncryptedKey)
-            .IsRequired()
-            .HasColumnType("bytea");
-
-        builder.Property(x => x.KeyNonce)
-            .IsRequired()
-            .HasColumnType("bytea");
-
-        builder.Property(x => x.KeyAuthenticationTag)
-            .IsRequired()
-            .HasColumnType("bytea");
-
         builder.Property(x => x.CreatedAt)
             .IsRequired();
 
