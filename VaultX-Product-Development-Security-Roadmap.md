@@ -598,6 +598,8 @@ VaultX should now behave like a real authenticated application.
 
 # 7. Phase 3 — Vault Creation & Access
 
+**Status: Complete**
+
 ## Goal
 
 Introduce the central VaultX concept: the user's vault.
@@ -669,9 +671,13 @@ This phase begins serious testing for:
 
 # 8. Phase 4 — Password Entries
 
+**Status: In Progress — Metadata-Only Design Approved**
+
 ## Goal
 
-Build the first major VaultX product feature: storing and managing login credentials.
+Build the first usable entry lifecycle for descriptive login metadata. Phase 4 does not persist passwords or claim that entries are encrypted.
+
+The approved design is documented in [docs/architecture/phase-4-password-entries-design.md](docs/architecture/phase-4-password-entries-design.md). It allows only title, optional HTTP(S) website URL, username, and optional notes. Search covers title, website URL, and username; notes are excluded from list responses and search.
 
 Each operation will be implemented as a complete vertical slice.
 
@@ -770,6 +776,8 @@ Potential features:
 ---
 
 ## Phase 4 Completion Criteria
+
+Password persistence, cryptographic primitives, key derivation, encryption, decryption, and zero-knowledge behavior are explicitly outside this phase. See Phases 5, 6, and 7.
 
 ```text
 Create      ✓
@@ -1607,8 +1615,8 @@ Phase 0 — Product & Security Foundation     ✓ COMPLETE
 Phase 1 — Architecture Foundation          ✓ COMPLETE
 
 Phase 2 — Account & Authentication         ✓ COMPLETE
-Phase 3 — Vault Creation & Access           ← CURRENT
-Phase 4 — Password Entries                  ⏳
+Phase 3 — Vault Creation & Access           ✓ COMPLETE
+Phase 4 — Password Entries                  ← CURRENT
 Phase 5 — Cryptographic Core                ⏳
 Phase 6 — Encrypted Vault                   ⏳
 Phase 7 — Zero-Knowledge Architecture       ⏳

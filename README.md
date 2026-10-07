@@ -52,7 +52,7 @@ Complete
 
 ## Current Status
 
-Phase 1 (Architecture Foundation) and Phase 2 (Account & Authentication) are complete, including registration, login, refresh-token rotation, logout, protected user resources, rate limiting, account lockout, and JWT signing-key hardening. Phase 3 (Vault Creation & Access) is current. Its initial vault is metadata-only; password entries belong to Phase 4, cryptographic primitives to Phase 5, encrypted-vault functionality to Phase 6, and zero-knowledge architecture to Phase 7.
+Phase 1 (Architecture Foundation), Phase 2 (Account & Authentication), and Phase 3 (Vault Creation & Access) are complete. Phase 4 (Password Entries) is in progress and intentionally stores entry metadata only; it does not store passwords or implement encryption. Cryptographic primitives remain in Phase 5, encrypted-vault functionality in Phase 6, and zero-knowledge architecture in Phase 7.
 
 ## Branch Strategy
 

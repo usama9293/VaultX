@@ -143,6 +143,7 @@ public class Program
         var app = builder.Build();
 
         app.UseMiddleware<ExceptionHandlingMiddleware>();
+        app.UseMiddleware<RequestBodySizeLimitMiddleware>();
 
         if (app.Environment.IsDevelopment())
         {

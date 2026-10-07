@@ -1,11 +1,10 @@
 namespace PasswordManager.Application.DTOs.Vault;
 
-/// <summary>Metadata for one entry, excluding ownership and password material.</summary>
-public sealed record VaultEntryResponse(
+/// <summary>Entry metadata returned in a vault list without free-text notes.</summary>
+public sealed record VaultEntryListItemResponse(
     Guid Id,
     string Title,
     string? WebsiteUrl,
     string Username,
-    string? Notes,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);

@@ -1,6 +1,6 @@
 .vault-dashboard {
   width: 100%;
-  max-width: 720px;
+  max-width: 840px;
   background: var(--bg-card);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border-subtle);
@@ -40,6 +40,175 @@
   width: 100%;
 }
 
+.vault-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding-top: 1.5rem;
+}
+
+.metadata-notice {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  background: rgb(255 255 255 / 4%);
+}
+
+.entry-view-heading,
+.entry-search > div,
+.entry-actions,
+.entry-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.entry-view-heading h2,
+.entry-list-state h3,
+.entry-list-state p {
+  margin: 0;
+}
+
+.entry-form,
+.entry-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.entry-form label,
+.entry-search label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.entry-form input,
+.entry-form textarea,
+.entry-search input {
+  width: 100%;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.85rem;
+  font: inherit;
+}
+
+.entry-form input:focus,
+.entry-form textarea:focus,
+.entry-search input:focus {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.entry-form textarea {
+  resize: vertical;
+}
+
+.entry-search > div {
+  justify-content: flex-start;
+}
+
+.entry-search input {
+  flex: 1;
+}
+
+.entry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.entry-list-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 1rem;
+  color: var(--text-secondary);
+  text-align: left;
+  background: rgb(255 255 255 / 4%);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.entry-list-item:hover {
+  border-color: var(--accent-primary);
+}
+
+.entry-list-title {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.entry-list-url {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.entry-list-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 2rem 1rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.entry-detail dl {
+  display: grid;
+  grid-template-columns: minmax(90px, 150px) minmax(0, 1fr);
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.entry-detail dt {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.entry-detail dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.entry-notes {
+  white-space: pre-wrap;
+}
+
+.entry-detail a {
+  color: var(--accent-primary);
+  overflow-wrap: anywhere;
+}
+
+.danger-btn {
+  padding: 0.7rem 1rem;
+  color: #fff;
+  background: #9b2c2c;
+  border: 0;
+  border-radius: var(--radius-md);
+  font: inherit;
+  cursor: pointer;
+}
+
+.danger-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 @media (max-width: 520px) {
   .vault-dashboard {
     padding: 1.5rem 1rem;
@@ -47,5 +216,22 @@
 
   .vault-dashboard-header {
     align-items: center;
+  }
+
+  .entry-search > div {
+    flex-wrap: wrap;
+  }
+
+  .entry-search input {
+    flex-basis: 100%;
+  }
+
+  .entry-detail dl {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
+
+  .entry-detail dd {
+    margin-bottom: 0.6rem;
   }
 }

@@ -1,0 +1,47 @@
+@PasswordManager.API_HostAddress = http://localhost:5071
+@accessToken = paste-a-valid-access-token-here
+@entryId = 00000000-0000-0000-0000-000000000001
+
+### Create metadata-only entry
+POST {{PasswordManager.API_HostAddress}}/api/vault/entries
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "title": "Example account",
+  "websiteUrl": "https://example.com",
+  "username": "user@example.com",
+  "notes": "Metadata only; no password is stored."
+}
+
+### List entries
+GET {{PasswordManager.API_HostAddress}}/api/vault/entries?page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
+### Search entries
+GET {{PasswordManager.API_HostAddress}}/api/vault/entries?q=example&page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
+### Get entry detail
+GET {{PasswordManager.API_HostAddress}}/api/vault/entries/{{entryId}}
+Authorization: Bearer {{accessToken}}
+
+### Replace entry metadata
+PUT {{PasswordManager.API_HostAddress}}/api/vault/entries/{{entryId}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "title": "Updated example account",
+  "websiteUrl": null,
+  "username": "updated@example.com",
+  "notes": null
+}
+
+### Delete entry
+DELETE {{PasswordManager.API_HostAddress}}/api/vault/entries/{{entryId}}
+Authorization: Bearer {{accessToken}}
+
+### Missing entry returns 404
+GET {{PasswordManager.API_HostAddress}}/api/vault/entries/00000000-0000-0000-0000-000000000002
+Authorization: Bearer {{accessToken}}

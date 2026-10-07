@@ -71,7 +71,7 @@ const AppContent: React.FC = () => {
   if (authState.status === 'authenticated' && authState.accessToken) {
     return (
       <main>
-        <VaultDashboard accessToken={authState.accessToken} />
+        <VaultDashboard key={authState.accessToken} accessToken={authState.accessToken} />
       </main>
     )
   }

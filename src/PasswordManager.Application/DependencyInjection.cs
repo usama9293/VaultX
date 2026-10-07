@@ -6,6 +6,7 @@ using PasswordManager.Application.Features.Authentication.Refresh;
 using PasswordManager.Application.Features.Users.GetById;
 using PasswordManager.Application.Features.Vault.GetCurrent;
 using PasswordManager.Application.Features.Vault.Initialize;
+using PasswordManager.Application.Features.Vault.Entries;
 
 namespace PasswordManager.Application;
 
@@ -20,6 +21,7 @@ public static class DependencyInjection
         services.AddScoped<IGetUserByIdHandler, GetUserByIdHandler>();
         services.AddScoped<IInitializeVaultHandler, InitializeVaultHandler>();
         services.AddScoped<IGetCurrentVaultHandler, GetCurrentVaultHandler>();
+        services.AddScoped<IVaultEntryService, VaultEntryService>();
         return services;
     }
 }

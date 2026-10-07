@@ -22,23 +22,23 @@ public class VaultEntryConfiguration : IEntityTypeConfiguration<VaultEntry>
             .HasMaxLength(255);
 
         builder.Property(x => x.WebsiteUrl)
-            .IsRequired()
+            .IsRequired(false)
             .HasMaxLength(2048);
 
         builder.Property(x => x.Username)
             .IsRequired()
             .HasMaxLength(255);
 
-        builder.Property(x => x.EncryptedPassword)
-            .IsRequired()
+        builder.Property<byte[]?>("EncryptedPassword")
+            .IsRequired(false)
             .HasColumnType("bytea");
 
-        builder.Property(x => x.PasswordNonce)
-            .IsRequired()
+        builder.Property<byte[]?>("PasswordNonce")
+            .IsRequired(false)
             .HasColumnType("bytea");
 
-        builder.Property(x => x.PasswordAuthenticationTag)
-            .IsRequired()
+        builder.Property<byte[]?>("PasswordAuthenticationTag")
+            .IsRequired(false)
             .HasColumnType("bytea");
 
         builder.Property(x => x.Notes)
